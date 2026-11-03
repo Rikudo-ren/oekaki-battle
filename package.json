@@ -1,0 +1,7 @@
+{
+  "name": "oekaki-battle",
+  "private": true,
+  "scripts": {"build": "esbuild src/app.js --bundle --minify --outfile=public/app.js"},
+  "dependencies": {"firebase": "^11.0.0"},
+  "devDependencies": {"esbuild": "^0.25.0"}
+}
