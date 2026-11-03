@@ -70,6 +70,8 @@ npx firebase-tools emulators:exec --only database --project demo-oekaki "node --
 
 ## 仕組みと運用上の注意
 
+- 描き手は正解者が出る前ならお題をパスできます。全員に「パス！」を表示した後、同じ描き手の新しいお題に変わり、絵と制限時間はリセットされます。正解後のパスはできません。
+- ホストはGM操作からお題を終了して正解者に得点を付けるか、試合を強制終了して設定に戻せます。強制終了時は進行中のお題を破棄し、部屋・参加者・確定済みの得点を残します。次の試合を開始すると得点とチャット履歴はリセットされます。
 - 部屋のチャットは最新100件を表示します。メッセージと描画の履歴は部屋ごとに保存され、参加者に共有されます。最後の参加者が「ホームへ」で退出すると、その部屋と対応するチャット・描画・お題・ヒント・正解記録を削除します。通報・モデレーション機能はありません。
 - チャットの答え漏れを防ぐため、プレイ中の送信前に `chatGuard` の書き込みで新ルールを確認します。旧ルールのままでは回答や会話を送信できません。
 - 接続状態と部屋の片付け、文字ヒント・制限時間・得点、「もどす」「全部消す」、チャットを利用するには、最新の `database.rules.json` を Firebase に公開し、新しい画面を Vercel にデプロイしてください。旧画面と新ルールは互換性がないため、公開の切り替え中や切り替え前から進行中の部屋では正常に遊べません。公開後は画面を更新し、新しい部屋を作ってください。
@@ -87,6 +89,6 @@ npx firebase-tools emulators:exec --only database --project demo-oekaki "node --
 - ヒント・正解・時間切れの効果音: [SFX Kit by wyzowl](https://github.com/wyzowl/sfx-kit)、[CC0 1.0](public/sounds/SFX-KIT-LICENSE.txt)。元音声をそのまま使用。
 - サウンドボタンの確認音: [Kenney UI Audio by Kenney](https://github.com/Calinou/kenney-ui-audio)、[CC0 1.0](public/sounds/KENNEY-LICENSE.txt)。元のWAV音声をそのまま使用。
 
-- カウントダウン・スタート音: [MAKE10](https://github.com/Rikudo-ren/make10) が加工した [Kenney Audio Pack](https://kenney.nl/assets/audio-pack) の `click2` / `threeTone1`、CC0 1.0。終了のホイッスル音は Web Audio で生成しています。
+- カウントダウン・スタート・パス音: [MAKE10](https://github.com/Rikudo-ren/make10) が加工した [Kenney Audio Pack](https://kenney.nl/assets/audio-pack) の `click2` / `threeTone1` / `lowRandom`、CC0 1.0。終了のホイッスル音は Web Audio で生成しています。
 
-- BGM: [Komiku](https://komiku.bandcamp.com/) の *Welcome to the machine*（待機中）と *Action Techno*（対戦中）、CC0 1.0。[MAKE10](https://github.com/Rikudo-ren/make10/blob/main/docs/AUDIO.md) でループ・音量調整した音源を使用。
+- BGM: おえかきバトル用のオリジナル曲。`scripts/create-soft-bgm.py` で生成した、外部サンプルを使わないループ音源です。

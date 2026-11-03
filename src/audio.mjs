@@ -2,6 +2,7 @@ const sources = {
   turn: '/sounds/click1.wav',
   tick: '/sounds/make10-tick.mp3',
   go: '/sounds/make10-go.mp3',
+  pass: '/sounds/make10-pass.mp3',
   hint: '/sounds/notification-attention-soft.wav',
   correct: '/sounds/notification-success-sparkle.wav',
   timeout: '/sounds/notification-failure-pluck.wav',
