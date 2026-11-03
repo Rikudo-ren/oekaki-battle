@@ -1,0 +1,217 @@
+/* A bright, compact play table. The canvas and controls stay on screen; only
+   the explicitly opened chat history and settings panel have their own scroll. */
+:root{--blue:#218aba;--deep-blue:#136388;--sky:#b9e1f3;--yellow:#ffd45a;--coral:#ef705d;--green:#48a88d}
+body{background:#f6fbfd;color:#244753}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #fda948;outline-offset:2px}
+.header{background:#fff;max-width:none;height:60px;padding:0 max(20px,calc((100vw - 1200px)/2));border-bottom:3px solid #d3ebf3}
+.brand{font-size:19px;color:#244d61}.brand-icon{background:#ffda70;border:2px solid #eaba4b;box-shadow:0 2px 0 #eaba4b}
+.header-actions{gap:8px}.sound-toggle{background:#eff8fb;border:1px solid #c7e5ef;color:#2a7894;padding:7px 10px}.sound-toggle[aria-pressed=false]{background:#f1f1ef;color:#888}
+.entry-tabs{display:none}.how>summary{list-style:none;cursor:pointer;font-weight:900;color:#277a9c}.how>summary::-webkit-details-marker{display:none}
+body.screen-game,body.screen-lobby{height:100dvh;overflow:hidden;background:#d6eef8}
+body.screen-game main,body.screen-lobby main{height:calc(100dvh - 60px);max-width:1200px;padding:0 14px}
+body.screen-game footer,body.screen-lobby footer{display:none}
+body.screen-game .room,body.screen-lobby .room{height:100%;padding:8px 0 max(9px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:7px;min-height:0}
+body.screen-game .room-heading,body.screen-lobby .room-heading{flex:none;margin:0;min-height:29px}
+body.screen-game .room-heading .eyebrow,body.screen-lobby .room-heading .eyebrow{display:none}
+body.screen-game .room-heading h1,body.screen-lobby .room-heading h1{display:inline;font-size:15px;letter-spacing:0;margin:0;color:#28617d}
+body.screen-game .room-heading p,body.screen-lobby .room-heading p{display:inline;font-size:11px;margin-left:10px;color:#518298}
+body.screen-game .text-button,body.screen-lobby .text-button{font-size:11px;background:#fff;border:1px solid #b9dce9;border-radius:99px;padding:6px 12px;color:#36718b}
+body.screen-game .room-layout,body.screen-lobby .room-layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,2fr) minmax(250px,1fr);gap:12px}
+body.screen-game .room-main,body.screen-game .room-side,body.screen-lobby .room-main,body.screen-lobby .room-side{min-height:0;min-width:0}
+body.screen-game #game{height:100%;min-height:0;display:flex;flex-direction:column;gap:7px}
+body.screen-game .game-status{flex:none;margin:0;padding:9px 12px;background:#1687b7;border:2px solid #1374a0;border-radius:13px;color:white;box-shadow:0 4px 0 #0b709d}
+body.screen-game .game-status-top{margin:0 0 5px;gap:6px;min-width:0}
+body.screen-game .game-status .kicker{color:#d4f2ff;font-size:10px;letter-spacing:.04em;white-space:nowrap}
+body.screen-game .turn-indicators{gap:6px;justify-content:flex-end;min-width:0}
+body.screen-game .turn-badge{display:none}
+body.screen-game .prompt-line{gap:9px;flex-wrap:nowrap;min-width:0}
+body.screen-game .prompt-line h2{font-size:16px;color:#fff;white-space:nowrap}
+body.screen-game .word-tiles{flex-wrap:nowrap;gap:4px}
+body.screen-game .word-tile{height:34px;width:34px;flex:none;border:2px solid #fff;background:#fff5c6;color:#b4791e;border-radius:7px;box-shadow:0 3px 0 #eac85c;font-size:16px}
+body.screen-game .word-tile.empty{background:#6fbbe0;border-color:#a6d6ee;box-shadow:0 3px 0 #3c9dc9;color:#d9f2fc}
+body.screen-game .word-tile.hint{background:#ffec9d;color:#94650d}
+body.screen-game .game-status p{color:#def4ff;font-size:11px;line-height:1.3;margin-top:6px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+body.screen-game .answer-slots{margin:0;color:#fff;font-size:10px;gap:3px;white-space:nowrap;flex-wrap:nowrap}
+body.screen-game .answer-slot{width:10px;height:10px;border-color:#a7d9ec;background:#5aadd1;flex:none}
+body.screen-game .answer-slot.filled{background:#ffde5f;border-color:#fff5c9;box-shadow:0 0 6px #ffdf6e}
+body.screen-game .timer{font-size:12px;padding:5px 7px;border-radius:7px;color:#13749c;white-space:nowrap}
+body.screen-game .timer.low{color:#e24e40;background:#fff2d4;animation:timer-beat .8s ease-in-out infinite alternate}
+@keyframes timer-beat{to{transform:scale(1.07)}}
+body.screen-game .whistle{width:auto;margin:0;min-height:0;padding:6px 8px;background:#ffdd69;border:0;box-shadow:0 2px 0 #d7ae42;color:#775314;font-size:10px;white-space:nowrap}
+body.screen-game .game-stage{flex:1;min-height:0;display:flex;flex-direction:column;padding:8px;background:#80c6e2;border:2px solid #54acd2;border-radius:13px;box-shadow:0 4px 0 #4fa7c8}
+body.screen-game .canvas-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:transparent;border:0;overflow:hidden;box-shadow:none}
+body.screen-game .canvas-wrap canvas{display:block;width:auto;height:auto;max-width:100%;max-height:100%;aspect-ratio:1/1;background:#fff;border:3px solid #fff;border-radius:10px;box-shadow:0 4px 0 #51a6c6,0 7px 12px #206b8930;touch-action:none}
+body.screen-game #canvas-placeholder{top:50%;transform:translateY(-50%);font-size:12px;color:#aacbd5}
+body.screen-game .tools{flex:none;padding:8px 3px 4px;gap:8px;justify-content:space-between}
+body.screen-game .colors{gap:8px}body.screen-game .colors button{width:27px;height:27px;border:2px solid #fff;box-shadow:0 2px 0 #4fa7c8}
+body.screen-game .colors button.selected{outline:2px solid #ffdb5a;outline-offset:2px}
+body.screen-game .tool-actions{width:auto;gap:5px;justify-content:flex-end}body.screen-game .tools label{font-size:10px;color:#155e7c}body.screen-game .tools input{width:60px;accent-color:#f77c5e}
+body.screen-game .tool-button:not(.whistle){min-height:30px;padding:5px 7px;background:#fff;border:0;color:#287694;box-shadow:0 2px 0 #54a4c3;font-size:10px}
+body.screen-game .game-players{flex:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:7px 0 0;overflow:visible}
+body.screen-game .game-player{min-width:0;justify-content:flex-start;gap:4px;border:1px solid #6db8d3;background:#e7f7fc;border-radius:8px;padding:4px;overflow:hidden}
+body.screen-game .game-player.is-drawer{background:#fff1b9;border-color:#ffcb52;box-shadow:inset 0 0 0 1px #ffdc75}
+body.screen-game .game-player .avatar{width:24px;height:24px;border-radius:8px;font-size:14px}
+body.screen-game .game-player-name{font-size:10px;max-width:none;flex:1;min-width:0}
+body.screen-game .game-player-score{font-size:10px;color:#bd7344;white-space:nowrap}
+body.screen-game .game-player-role{display:none}
+body.screen-game .answer-form{flex:none;margin:0;gap:7px}
+body.screen-game .answer-form input{height:42px;font-size:16px;background:white;border:2px solid #96cee1;border-radius:10px}
+body.screen-game .answer-form .primary{height:42px;width:112px;margin:0;background:#ff875e;box-shadow:0 3px 0 #d76748;border-radius:10px;font-size:13px}
+body.screen-game .answer-wait,body.screen-game .result{flex:none;margin:0;padding:9px;border-radius:10px;font-size:12px;line-height:1.35}
+body.screen-game .answer-wait{background:#fff8ca;color:#98701a;border:2px solid #ffe27c}
+body.screen-game .result{background:#fff4bb;color:#825a12;border:2px solid #f7d15e}
+body.screen-game #next{flex:none;height:40px;margin:0;background:#ff875e;box-shadow:0 3px 0 #d76748}
+body.screen-game .room-side{display:flex;min-height:0}
+.chat-panel{min-height:0}.chat-expand{border:0;background:#e4f4fb;color:#277da0;border-radius:999px;padding:6px 11px;font-size:11px;font-weight:900}.chat-backdrop{display:none}
+body.screen-game .chat-panel{flex:1;display:flex;flex-direction:column;min-height:0;padding:14px;background:#fff;border:2px solid #b7dfed;border-top:5px solid #46a7cf;border-radius:14px;box-shadow:0 4px 0 #8ac7dd}
+body.screen-game .chat-heading h2{font-size:15px;color:#276e8a;margin:0}body.screen-game .chat-heading .kicker,body.screen-game .chat-intro,body.screen-game .chat-note{display:none}
+body.screen-game .chat-feed{flex:1;min-height:0;margin-top:9px}body.screen-game .chat-messages{height:100%;background:#f0f9fc;border-color:#d8edf5}
+body.screen-game .chat-empty{padding:25px 0}
+body.screen-game .chat-form{flex:none;margin-top:7px}body.screen-game .chat-form input{height:40px;font-size:16px;background:white;border:2px solid #c6e3ee}body.screen-game .chat-form button{background:#46a98e}
+/* Room settings are available without pushing the game table off screen. */
+.settings-launch{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e6edf0;padding:12px 0 2px;font-size:12px;font-weight:800;color:#4b7b8c}
+.settings-launch .outline{color:#247999;border-color:#b9dfed;background:#f1faff}
+.settings-dialog{width:min(440px,calc(100vw - 28px));max-height:min(80dvh,720px);border:0;border-radius:18px;padding:0;box-shadow:0 16px 60px #163e5180;color:#244753}
+.settings-dialog::backdrop{background:#14394ec0}.settings-dialog-head{position:sticky;top:0;z-index:1;background:#e8f8ff;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #cce6f0}
+.settings-dialog-head h2{font-size:17px;margin:0}.settings-body{padding:5px 20px 20px}.settings-body .setting{padding:10px 0}.settings-body .setting p{font-size:11px}.settings-body input{height:36px}
+body.screen-lobby .room-main{display:flex;align-items:flex-start}
+body.screen-lobby #lobby{width:100%;padding:20px;background:#fff;border:2px solid #b7dfed;box-shadow:0 4px 0 #8ac7dd}
+body.screen-lobby .panel-top h2{font-size:18px;margin:3px 0}body.screen-lobby .panel-top p{font-size:11px}body.screen-lobby .big-emoji{font-size:30px}
+body.screen-lobby .code-row{margin:12px 0;padding:9px 14px;background:#fff7d8;border:2px dashed #f1d17b}
+body.screen-lobby .code-row strong{font-size:25px;color:#806223}
+body.screen-lobby #start{height:45px;margin-top:12px;background:#f47e5c;box-shadow:0 4px 0 #d56545}
+body.screen-lobby .room-side{display:flex;flex-direction:column;min-height:0;gap:10px}
+body.screen-lobby .players-panel,body.screen-lobby .chat-panel{padding:14px;border:2px solid #b7dfed;box-shadow:0 4px 0 #8ac7dd}
+body.screen-lobby .players-panel{flex:none;max-height:40%;overflow:auto}body.screen-lobby .players-heading{padding-bottom:6px}body.screen-lobby .players-heading h2{font-size:15px;margin:3px 0}
+body.screen-lobby .player{padding:5px 0}body.screen-lobby .player-note{display:none}body.screen-lobby .player .avatar{width:28px;height:28px;font-size:15px}
+body.screen-lobby .chat-panel{flex:1;display:flex;flex-direction:column}body.screen-lobby .chat-feed{min-height:0;flex:1;margin-top:8px}body.screen-lobby .chat-messages{height:100%}body.screen-lobby .chat-heading h2{font-size:15px;margin:0}body.screen-lobby .chat-intro,body.screen-lobby .chat-note,body.screen-lobby .chat-heading .kicker{display:none}
+body.screen-lobby .chat-form input{height:40px;font-size:16px}body.screen-lobby .chat-empty{padding:20px 0}
+/* Expanded chat is an in-screen sheet, with history as its only scrolling area. */
+body.chat-open .chat-backdrop{display:block;position:fixed;inset:0;z-index:40;border:0;background:#173c52a6}
+body.chat-open .room-side .chat-panel{position:fixed;z-index:41;left:50%;bottom:max(10px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(500px,calc(100vw - 20px));height:min(70dvh,600px);max-height:none;padding:16px;display:flex;background:#fff;border:2px solid #81c8e3;border-top:5px solid #46a7cf;box-shadow:0 12px 48px #123e5570}
+body.chat-open .chat-feed{flex:1;min-height:0}body.chat-open .chat-messages{height:100%}
+@media(max-width:700px){
+ .header{height:48px;padding:0 12px;border-width:2px}.brand{font-size:15px;gap:5px}.brand-icon{width:30px;height:30px;font-size:16px;border-radius:10px}.sound-toggle{font-size:10px;padding:6px 7px}.sound-toggle span{font-size:9px}.header-actions{gap:5px}
+ body:not(.screen-game):not(.screen-lobby) main{padding:0 15px}
+ .home{min-height:calc(100dvh - 48px);position:relative;display:flex;gap:0}.hero-copy{padding:20px 0 10px}.hero-copy .eyebrow{font-size:9px}.hero-copy h1{font-size:26px;line-height:1.35;margin:7px 0}.hero-copy p{font-size:11px;line-height:1.5}.hero-tags,.hero-art{display:none}
+ .entry-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:5px;background:#dceff6;border-radius:12px}.entry-tabs button{border:0;border-radius:9px;background:transparent;color:#538194;font-weight:900;font-size:12px;height:38px}.entry-tabs button[aria-selected=true]{background:#fff;color:#147aa6;box-shadow:0 2px 5px #3789a52b}
+ .entry-grid{display:block}.entry-grid .card{padding:16px 18px;margin-top:8px;border:2px solid #d2eaf2;box-shadow:0 4px 0 #bedeea;border-radius:14px}.entry-grid .join-card{display:none}body.join-mode .entry-grid .join-card{display:block}body.join-mode .entry-grid .create-card{display:none}
+ .card-label{font-size:10px}.label-icon{width:25px;height:25px}.card h2{font-size:19px;margin:10px 0 3px}.card p{font-size:11px}.card label{margin:10px 0 5px}.card input{height:42px;font-size:16px}.card .primary,.card .secondary{height:43px;margin-top:10px}.join-inputs{gap:7px}
+ .how{padding:13px 0 8px}.how>summary{font-size:12px;text-align:center}.how[open] .section-title,.how[open] .steps{display:none}.how[open]::after{content:'合言葉で集まって、順番に絵を描こう！\a わかったら、ひらがなで答えてね。\a 正解した人みんなにポイント！';display:block;white-space:pre-line;text-align:center;color:#517d8e;font-size:11px;line-height:1.7;padding:8px}
+ body:not(.screen-game):not(.screen-lobby) footer{display:none}
+ body.screen-game main,body.screen-lobby main{height:calc(100dvh - 48px);padding:0 9px}
+ body.screen-game .room,body.screen-lobby .room{gap:5px;padding-top:5px}
+ body.screen-game .room-heading,body.screen-lobby .room-heading{min-height:25px}
+ body.screen-game .room-heading h1,body.screen-lobby .room-heading h1{font-size:12px}
+ body.screen-game .room-heading p,body.screen-lobby .room-heading p{font-size:10px;margin-left:5px}
+ body.screen-game .text-button,body.screen-lobby .text-button{padding:4px 8px;font-size:10px}
+ body.screen-game .room-layout,body.screen-lobby .room-layout{display:flex;flex-direction:column;gap:7px}
+ body.screen-game .room-main{flex:1;min-height:0}body.screen-game .room-side{flex:none;height:124px;display:flex}
+ body.screen-game #game{gap:6px}.game-status{padding:8px}
+ body.screen-game .game-status{padding:7px 9px}.game-status-top{min-height:19px}
+ body.screen-game .prompt-line h2{font-size:13px}body.screen-game .word-tile{width:29px;height:29px;font-size:14px}body.screen-game .game-status p{font-size:10px;margin-top:5px}
+ body.screen-game .game-stage{padding:6px}body.screen-game .game-players{padding-top:6px}
+ body.screen-game .chat-panel{padding:8px 10px;border-top-width:3px}.chat-heading{min-height:20px}body.screen-game .chat-heading h2{font-size:12px}.chat-expand{font-size:10px;padding:4px 9px}
+ body.screen-game .chat-feed{margin-top:4px}body.screen-game .chat-messages{padding:4px 7px}.chat-message{margin-bottom:4px;gap:1px}.chat-message-meta{font-size:9px}.chat-message-text{padding:3px 7px;font-size:11px}.chat-empty{font-size:10px!important}body.screen-game .chat-empty{padding:2px 0}
+ body.screen-game .chat-form{margin-top:4px}.chat-form input{height:35px!important}.chat-form button{width:42px}
+ body.screen-lobby .room-main{flex:none}body.screen-lobby #lobby{padding:12px}body.screen-lobby .panel-top h2{font-size:15px}body.screen-lobby .panel-top .kicker{font-size:9px}body.screen-lobby .code-row{margin:8px 0;padding:6px 10px}body.screen-lobby .code-row strong{font-size:22px}body.screen-lobby .settings-launch{padding:8px 0 0}body.screen-lobby #start{height:39px;margin-top:8px}body.screen-lobby .center-hint{margin-top:5px!important}
+ body.screen-lobby .room-side{flex:1;min-height:0;gap:7px}body.screen-lobby .players-panel,body.screen-lobby .chat-panel{padding:8px 10px}body.screen-lobby .players-panel{max-height:34%;overflow:auto}body.screen-lobby .players-heading .kicker{display:none}body.screen-lobby .players-heading h2{font-size:12px}body.screen-lobby #players{display:flex;gap:5px;overflow-x:auto}body.screen-lobby .player{flex:none;width:auto;border:0;padding:5px 5px 0;gap:4px}body.screen-lobby .player-name{font-size:10px}body.screen-lobby .player-name small{font-size:8px}body.screen-lobby .chat-heading h2{font-size:12px}body.screen-lobby .chat-feed{margin-top:4px}body.screen-lobby .chat-form{margin-top:4px}
+}
+@media(max-width:360px){body.screen-game .room-heading p{display:none}body.screen-game .colors{gap:5px}body.screen-game .colors button{width:24px;height:24px}body.screen-game .tools input{width:43px}body.screen-game .tool-button:not(.whistle){padding:5px}body.screen-game .game-player .avatar{width:20px;height:20px;font-size:12px}body.screen-game .game-player-name,body.screen-game .game-player-score{font-size:9px}}
+@media(max-height:700px) and (max-width:700px){body.screen-game .room-side{height:91px}body.screen-game .chat-feed{margin-top:2px}body.screen-game .chat-messages{padding:2px 6px}body.screen-game .chat-message-meta{display:none}body.screen-game .chat-message{margin:0}body.screen-game .chat-message-text{padding:1px 5px}body.screen-game .chat-form{margin-top:2px}body.screen-game .chat-form input{height:31px!important}body.screen-game .game-status p{display:none}body.screen-game .game-players{padding-top:4px}body.screen-game .tools{padding:5px 1px 2px}body.screen-game .answer-form input,body.screen-game .answer-form .primary{height:38px}body.screen-lobby .players-panel{max-height:28%}body.screen-lobby .panel-top p{display:none}}
+/* Extremely short viewports / software keyboards: allow access instead of clipping. */
+@media(max-height:470px){body.screen-game,body.screen-lobby{height:auto;min-height:100dvh;overflow:auto}body.screen-game main,body.screen-lobby main{height:auto;min-height:calc(100dvh - 48px)}body.screen-game .room,body.screen-lobby .room{height:auto;min-height:calc(100dvh - 48px)}body.screen-game .room-layout{min-height:480px}body.screen-game .room-side{min-height:90px}body.screen-game .canvas-wrap{min-height:180px}body.screen-lobby .room-side{min-height:180px}}
+@media(prefers-reduced-motion:reduce){body.screen-game .timer.low{animation:none}}
+/* A small popover keeps brush size available without stealing a second row. */
+body.screen-game .game-stage{position:relative}
+body.screen-game .brush-menu{position:relative;flex:none}
+body.screen-game .brush-menu summary{display:block;list-style:none;cursor:pointer;min-height:30px;padding:7px 8px;background:#fff;border-radius:9px;color:#287694;box-shadow:0 2px 0 #54a4c3;font-size:10px;font-weight:800;white-space:nowrap}
+body.screen-game .brush-menu summary::-webkit-details-marker{display:none}
+body.screen-game .brush-slider{position:absolute;z-index:4;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:7px;width:145px;padding:10px;border:2px solid #9cd3e8;border-radius:10px;background:white;box-shadow:0 5px 12px #17608040;color:#276e8a;white-space:nowrap}
+body.screen-game .brush-slider input{width:75px;margin:0}
+body.screen-game .answer-slot.filled{animation:slot-pop .35s ease-out}
+body.screen-game .is-ended .result{animation:result-pop .35s ease-out}
+@keyframes slot-pop{0%{transform:scale(.5)}60%{transform:scale(1.35)}100%{transform:scale(1)}}
+@keyframes result-pop{from{transform:scale(.96);opacity:.6}to{transform:scale(1);opacity:1}}
+@media(max-width:700px){body.screen-game .tools{flex-wrap:nowrap;gap:5px}body.screen-game .tool-actions{flex:1;justify-content:flex-end;flex-wrap:nowrap}body.screen-game .colors{gap:5px}body.screen-game .colors button{width:24px;height:24px}}
+@media(max-width:360px){body.screen-game .tools{gap:3px}body.screen-game .colors{gap:3px}body.screen-game .colors button{width:21px;height:21px}body.screen-game .tool-actions{gap:3px}body.screen-game .brush-menu summary,body.screen-game .tool-button:not(.whistle){font-size:9px;padding:6px 5px}}
+@media(max-height:700px) and (max-width:700px){body.screen-game .room-side{height:100px}}
+@media(prefers-reduced-motion:reduce){body.screen-game .answer-slot.filled,body.screen-game .is-ended .result{animation:none}}
+body.screen-game .game-player{display:grid;grid-template-columns:24px minmax(0,1fr);grid-template-rows:1fr 1fr;column-gap:5px;row-gap:0}
+body.screen-game .game-player .avatar{grid-row:1 / 3}
+body.screen-game .game-player-name,body.screen-game .game-player-score{line-height:1.1}
+body.screen-game .game-player-score{justify-self:start}
+@media(max-width:360px){body.screen-game .word-tile{width:24px;height:26px;font-size:13px}body.screen-game .prompt-line h2{font-size:12px}body.screen-game .game-player{grid-template-columns:20px minmax(0,1fr);column-gap:4px}}
+body.screen-game .tool-button{white-space:nowrap}
+@media(max-width:360px){body.screen-game .tool-icon{display:none}body.screen-game .tool-actions{flex:0 0 auto}body.screen-game .colors{margin-right:auto}}
+.how-compact{display:none}
+body.screen-game .canvas-wrap canvas{border:0}
+body.screen-game .result{max-height:clamp(56px,11dvh,90px);overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:700px){.how[open]::after{content:none}.how[open] .how-compact{display:block;white-space:normal;text-align:center;color:#517d8e;font-size:11px;line-height:1.7;padding:8px;margin:0}}
+@media(max-width:700px){
+ body.is-typing.screen-game,body.is-typing.screen-lobby{height:auto;min-height:100dvh;overflow-y:auto}
+ body.is-typing.screen-game main,body.is-typing.screen-lobby main{height:auto;min-height:calc(100dvh - 48px)}
+ body.is-typing.screen-game .room,body.is-typing.screen-lobby .room{height:auto;min-height:calc(100dvh - 48px)}
+ body.is-typing.screen-game .room-layout{min-height:480px}
+ body.is-typing.screen-game .canvas-wrap{min-height:130px}
+ body.is-typing.screen-lobby .room-side{min-height:180px}
+}
+body.screen-game .game-player{position:relative}
+body.screen-game .game-player.is-drawer .game-player-role{display:grid;place-items:center;position:absolute;left:19px;top:-5px;width:15px;height:15px;border-radius:50%;background:#ffcc3f;color:#78540d;font-size:10px;border:1px solid #fff;line-height:1}
+@media(max-width:360px){body.screen-game .game-player.is-drawer .game-player-role{left:16px}}
+body.screen-game .room-heading>div,body.screen-lobby .room-heading>div{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:360px){body.screen-game .room-heading h1{display:none}body.screen-game .room-heading p{display:inline;margin-left:0;font-weight:800}}
+body.screen-game .game-stage{background-image:radial-gradient(circle,#fff5 2px,transparent 2.5px),radial-gradient(circle,#fff3 1.5px,transparent 2px);background-position:0 0,19px 21px;background-size:44px 44px}
+@media(max-width:700px) and (min-height:740px){.home::after{content:'✦  みんなで おえかきタイム！  ✦';align-self:center;margin:auto 0 30px;color:#81b8c8;font-size:11px;font-weight:900;letter-spacing:.08em}}
+@media(min-width:701px){
+ body:not(.screen-game):not(.screen-lobby) footer{display:none}
+ .hero-copy{padding:38px 0 25px}.hero-copy h1{margin:11px 0;font-size:clamp(30px,3vw,39px)}.hero-tags{margin-top:18px}
+ .hero-art{min-height:240px;height:240px;margin:20px 0 10px}.hero-art:before{height:200px;width:280px;top:5px}.art-board{top:18px;height:185px}.art-board svg{height:118px}.answer-bubble{bottom:12px}.spark-one{top:12px}.pencil{bottom:0}
+ .entry-grid .card{padding:20px 24px}.entry-grid .card h2{margin:10px 0 4px}.entry-grid .card label{margin:12px 0 6px}.entry-grid .card input{height:43px}.entry-grid .card button{height:43px;margin-top:10px}
+ .how{padding:22px 0 25px}
+}
+@media(min-width:701px) and (max-height:700px){.hero-copy{padding:16px 0}.hero-copy h1{font-size:29px;line-height:1.35}.hero-copy p{line-height:1.5}.hero-tags{margin-top:8px}.hero-art{min-height:200px;height:200px;margin:8px 0}.hero-art:before{height:170px}.art-board{height:160px;top:10px}.art-board svg{height:94px}.answer-bubble{bottom:3px}.entry-grid .card{padding:14px 18px}.how{padding:12px 0}}
+@media(max-width:700px){
+ body.screen-game:not(.chat-open) .chat-message{flex-direction:row;align-items:center;gap:4px;margin-bottom:2px;min-height:18px}
+ body.screen-game:not(.chat-open) .chat-message.mine{justify-content:flex-end}
+ body.screen-game:not(.chat-open) .chat-message-meta{display:block;flex:none;max-width:72px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9px}
+ body.screen-game:not(.chat-open) .chat-message-text{min-width:0;max-width:75%;padding:2px 6px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+/* The whole play table is centered; chat is a wide strip underneath it. */
+@media(min-width:701px){
+ body.screen-game .room-layout{display:flex;flex-direction:column;gap:8px}
+ body.screen-game .room-main{flex:1;min-height:0}
+ body.screen-game .room-side{flex:none;height:112px}
+ body.screen-game:not(.chat-open) .chat-panel{display:grid;grid-template-columns:145px minmax(0,1fr) minmax(220px,32%);align-items:center;gap:12px;padding:10px 14px}
+ body.screen-game:not(.chat-open) .chat-heading{align-self:start;flex-direction:column;align-items:flex-start;gap:8px}
+ body.screen-game:not(.chat-open) .chat-feed{height:100%;min-height:0;margin:0}
+ body.screen-game:not(.chat-open) .chat-messages{height:100%;padding:6px 9px}
+ body.screen-game:not(.chat-open) .chat-form{margin:0;align-self:end}
+ body.screen-game:not(.chat-open) .chat-message{flex-direction:row;align-items:center;gap:7px;margin-bottom:3px}
+ body.screen-game:not(.chat-open) .chat-message.mine{justify-content:flex-end}
+ body.screen-game:not(.chat-open) .chat-message-meta{max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ body.screen-game:not(.chat-open) .chat-message-text{padding:3px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+}
+body.screen-game .game-player{grid-template-columns:34px minmax(0,1fr);column-gap:6px;overflow:visible}
+body.screen-game .game-player .avatar{width:34px;height:34px;font-size:20px;border-radius:11px}
+body.screen-game .game-player.is-drawer .game-player-role{left:27px;top:-4px}
+@media(max-width:360px){
+ body.screen-game .game-player{grid-template-columns:30px minmax(0,1fr);column-gap:4px}
+ body.screen-game .game-player .avatar{width:30px;height:30px;font-size:18px}
+ body.screen-game .game-player.is-drawer .game-player-role{left:24px}
+}
+/* Preserve legibility and canvas space on the shortest phones with eight players. */
+@media(max-width:360px){
+ body.screen-game .game-status .kicker{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:9px}
+ body.screen-game .turn-indicators{flex:none;gap:3px}
+ body.screen-game .answer-slots{gap:2px;font-size:9px}
+ body.screen-game .answer-slot{width:7px;height:7px}
+ body.screen-game .timer{font-size:10px;padding:4px}
+ body.screen-game .timer::before{margin-right:2px}
+ body.screen-game .whistle{font-size:9px;padding:5px}
+}
+@media(max-height:700px) and (max-width:700px){
+ body.screen-game .room-side{height:92px}
+ body.screen-game .result{max-height:44px}
+ body.screen-game #next{height:34px}
+}

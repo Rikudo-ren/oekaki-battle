@@ -22,6 +22,15 @@ function makeClient(uid,history){const dom=new JSDOM(html,{url:'https://example.
  w.eval(built.outputFiles[0].text);return {dom,d,w,uid};}
 function disconnect(client){for(const s of subs)if(s.uid===client.uid)s.active=false;for(const {p,v} of connections[client.uid].offline)apply(p,v);connections[client.uid].offline=[];client.dom.window.close();}
 async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('guest');host.d.querySelector('#create-name').value='ホスト';host.d.querySelector('#create').click();await wait();const code=Object.keys(data.rooms)[0];guest.d.querySelector('#join-name').value='ゲスト';guest.d.querySelector('#join-code').value=code;guest.d.querySelector('#join').click();await wait();assert.ok(getPath(`rooms/${code}/online/host`));assert.ok(getPath(`rooms/${code}/online/guest`));return {host,guest,code};}
+// Tabs, settings and chat are accessible without scrolling the main game view.
+{
+ const c=makeClient('host');c.d.querySelector('#tab-join').click();assert.equal(c.d.body.classList.contains('join-mode'),true);assert.equal(c.d.querySelector('#tab-join').getAttribute('aria-selected'),'true');c.d.querySelector('#tab-create').click();assert.equal(c.d.body.classList.contains('join-mode'),false);
+ c.d.querySelector('#create-name').value='ホスト';c.d.querySelector('#create').click();await wait();assert.ok(c.d.body.classList.contains('screen-lobby'));
+ c.d.querySelector('#settings-open').click();assert.equal(c.d.querySelector('#settings-dialog').hasAttribute('open'),true);c.d.querySelector('#settings-close').click();assert.equal(c.d.querySelector('#settings-dialog').hasAttribute('open'),false);
+ c.d.querySelector('#chat-expand').click();assert.ok(c.d.body.classList.contains('chat-open'));assert.equal(c.d.querySelector('#chat-expand').getAttribute('aria-expanded'),'true');c.d.querySelector('#chat-backdrop').click();assert.equal(c.d.body.classList.contains('chat-open'),false);
+ c.d.querySelector('#music-toggle').click();assert.equal(c.d.querySelector('#music-toggle').getAttribute('aria-pressed'),'false');
+ c.d.querySelector('#leave').click();await wait();assert.equal(c.d.body.classList.contains('screen-lobby'),false);c.dom.window.close();data={};subs=[];
+}
 // Voluntary host exit hands off; the last person removes all game resources.
 {
  const {host,guest,code}=await roomWithTwo();const room=getPath(`rooms/${code}`),game=room.gameId;

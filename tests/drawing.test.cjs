@@ -38,3 +38,13 @@ test('データベースルールは部屋のメンバーに限定したチャ�
   assert.match(drawing['.validate'],/'undo'/);
   assert.match(drawing['.validate'],/'clear'/);
 });
+
+test('正方形の画面でも以前の900×540座標を使って同期する', async () => {
+  const {pointerToLogical,logicalToCanvasY}=await import('../src/drawing.mjs');
+  const rect={left:10,top:20,width:300,height:300};
+  assert.deepEqual(pointerToLogical(160,170,rect),[450,270]);
+  assert.deepEqual(pointerToLogical(400,400,rect),[900,540]);
+  assert.equal(logicalToCanvasY(270,900),450);
+  assert.equal(logicalToCanvasY(540,900),900);
+  assert.equal(logicalToCanvasY(270,540),270);
+});

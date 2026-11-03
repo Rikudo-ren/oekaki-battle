@@ -2,7 +2,7 @@
 // The supplied shuffle keeps selection testable; the caller provides secure randomness.
 export function createHint(word, shuffle) {
   const characters = Array.from(word);
-  if (characters.length < 3 || characters.length > 6) throw new Error('お題は3〜6文字にしてください。');
+  if (characters.length < 2 || characters.length > 6) throw new Error('お題は2〜6文字にしてください。');
   const count = characters.length <= 4 ? 1 : 2;
   const indices = shuffle(characters.map((_, index) => index)).slice(0, count);
   return Object.fromEntries(indices.map(index => [`p${index}`, characters[index]]));
