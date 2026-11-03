@@ -334,3 +334,148 @@ body.screen-game .final-actions .primary{background:#ff875e;box-shadow:0 3px 0 #
 body.screen-game .final-actions .outline{background:#fff;color:#23799d}
 body.screen-game .final-controls p{margin:0;text-align:center;font-size:12px;color:#337697}
 @media(max-height:700px) and (max-width:700px){body.screen-game .final-actions button{height:34px;font-size:11px}}
+/* Shared score reveal: the order slides from the previous standings into the
+   new standings while each player's gain is called out. */
+.tier-settings:not(.hidden){display:grid;grid-template-columns:1fr;gap:4px}
+.tier-settings>div{display:grid;grid-template-columns:minmax(100px,1fr) repeat(2,minmax(70px,1fr));gap:6px;align-items:center}
+.tier-settings b,.tier-heading{font-size:12px;color:#537585}.tier-heading{font-weight:800}
+.tier-settings label{justify-content:center}.tier-settings input{width:52px}
+.scoreboard{position:fixed;inset:0;z-index:48;display:grid;place-items:center;background:rgba(14,47,67,.84);padding:12px;color:#34657a}
+.scoreboard-card{width:min(460px,100%);max-height:calc(100dvh - 24px);padding:clamp(12px,3vh,22px);border:3px solid #fff;border-radius:23px;background:#fffaf0;box-shadow:0 8px 0 #cae3e1,0 20px 50px #102f4260;text-align:center;overflow:auto;animation:scoreboard-pop .35s ease-out}
+.scoreboard-kicker{font-size:10px;letter-spacing:.18em;color:#e38d60;font-weight:900}.scoreboard-card h2{margin:2px 0;color:#276f8e;font-size:clamp(20px,5vw,27px)}
+.scoreboard-card p{margin:3px 0 9px;font-size:12px;font-weight:800}.scoreboard-list{--row-height:clamp(33px,6.5dvh,43px);display:grid;gap:3px;text-align:left}
+.scoreboard-row{height:var(--row-height);display:grid;grid-template-columns:38px minmax(0,1fr) 48px auto;align-items:center;gap:5px;padding:0 9px;border-radius:10px;background:#eaf6f4;font-weight:800;animation:ranking-slide .85s 1.1s cubic-bezier(.2,.75,.25,1) both}
+.scoreboard-row:first-child{background:#fff0bb}.scoreboard-rank{font-size:13px;color:#db9851}.scoreboard-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.scoreboard-gain{color:#ed7958;text-align:center;font-size:15px;animation:gain-pop .55s .35s both}.scoreboard-points{font-size:11px;white-space:nowrap;color:#4f8292}
+.scoreboard-card .scoreboard-caption{margin:9px 0 0;color:#96aaa6;font-size:10px}
+@keyframes scoreboard-pop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+@keyframes ranking-slide{from{transform:translateY(calc(var(--move) * (var(--row-height) + 3px)))}to{transform:translateY(0)}}
+@keyframes gain-pop{from{opacity:0;transform:scale(.4)}65%{opacity:1;transform:scale(1.3)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.scoreboard-card,.scoreboard-row,.scoreboard-gain{animation:none}}
+.scoreboard-rank{position:relative;display:block;height:1.3em}.scoreboard-rank span{position:absolute;left:0;top:0;white-space:nowrap}.rank-before{animation:rank-old 0s 1.9s forwards}.rank-after{opacity:0;animation:rank-new 0s 1.9s forwards}@keyframes rank-old{to{opacity:0}}@keyframes rank-new{to{opacity:1}}@media(prefers-reduced-motion:reduce){.rank-before{display:none}.rank-after{animation:none;opacity:1}}
+/* Keep the word length and revealed hint beside the letter boxes, even on
+   short phones where the explanatory paragraph is intentionally hidden. */
+body.screen-game .game-status{display:block}
+body.screen-game .game-status-top{margin:0 0 5px}
+body.screen-game .prompt-line{display:flex;justify-content:space-between;gap:5px;min-width:0}
+body.screen-game .word-info{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
+body.screen-game .prompt-line h2{font-size:12px;line-height:1.15}
+body.screen-game .word-count{display:inline-flex;align-items:center;white-space:nowrap;border-radius:7px;padding:3px 7px;background:#fff4bd;color:#76500b;font-size:15px;font-weight:900;line-height:1.1;box-shadow:0 2px 0 #e3b747}
+body.screen-game .hint-state{white-space:nowrap;color:#fff1a0;font-size:11px;font-weight:900;line-height:1.2}
+body.screen-game .word-tiles{justify-content:flex-end;flex:none}
+body.screen-game .word-tile.hint{background:#ffe46d;border-color:#fff;color:#6e4500;box-shadow:0 3px 0 #db9f18,0 0 0 3px #ffdf5d88;animation:hint-tile-pop .8s ease-out}
+/* The cursor moves from left to right through the same thirds used by scoring. */
+body.screen-game .score-gauge{margin-top:6px}
+.gauge-heading{display:flex;justify-content:space-between;align-items:center;color:#e0f5ff;font-size:10px;line-height:1.2;font-weight:800;margin-bottom:5px}
+.gauge-track{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;border-radius:8px;padding:2px;background:#0b608a}
+.gauge-band{min-width:0;display:grid;place-items:center;border-radius:5px;padding:4px 1px;background:#7db7d1;color:#214f62;font-size:11px;font-weight:900;line-height:1;white-space:nowrap;opacity:.72}
+.gauge-band:nth-child(1){background:#a9e9c0;color:#245d45}.gauge-band:nth-child(2){background:#ffe398;color:#73541b}.gauge-band:nth-child(3){background:#ffb5a5;color:#803c36}
+.gauge-band.is-current{opacity:1;box-shadow:inset 0 0 0 2px #fff}
+.gauge-cursor{position:absolute;z-index:1;top:-5px;left:clamp(5px,var(--elapsed),calc(100% - 5px));width:0;height:0;transform:translateX(-50%);border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #fff;filter:drop-shadow(0 1px 1px #175473);pointer-events:none}
+body.screen-game .canvas-wrap{position:relative}
+.hint-notice{position:absolute;z-index:3;left:50%;top:12%;transform:translateX(-50%);padding:8px 16px;border:2px solid #fff;border-radius:14px;background:#ffdc55;color:#704b0b;font-size:20px;font-weight:900;white-space:nowrap;text-align:center;box-shadow:0 4px 0 #d6a536,0 8px 20px #24536a55;pointer-events:none;animation:hint-notice-pop .45s ease-out}
+.hint-notice small{display:block;font-size:10px;color:#876218}
+@keyframes hint-notice-pop{from{opacity:0;transform:translateX(-50%) scale(.65)}70%{transform:translateX(-50%) scale(1.08)}to{opacity:1;transform:translateX(-50%) scale(1)}}
+@keyframes hint-tile-pop{0%{transform:scale(.65) rotate(-8deg)}55%{transform:scale(1.25) rotate(4deg)}100%{transform:scale(1) rotate(0)}}
+@media(min-width:701px){body.screen-game .game-status{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:4px}body.screen-game .game-status-top{grid-column:2;grid-row:1;margin:0}body.screen-game .prompt-line{grid-column:1;grid-row:1;justify-content:flex-start;gap:12px}body.screen-game .score-gauge{grid-column:1 / 3;grid-row:2;margin:0}body.screen-game .game-status p{display:none}}
+@media(max-width:360px){body.screen-game .word-info{gap:3px}body.screen-game .prompt-line h2{font-size:10px}body.screen-game .word-count{font-size:13px;padding:3px 5px}body.screen-game .hint-state{font-size:9px}body.screen-game .gauge-heading{font-size:9px}.gauge-band{font-size:10px;padding:3px 0}}
+@media(prefers-reduced-motion:reduce){body.screen-game .word-tile.hint,.hint-notice{animation:none}}
+/* Desktop play table: use the wider screen for readable names, controls and
+   chat, while keeping the square drawing surface centered above the chat. */
+@media(min-width:701px){
+ body.screen-game .header{height:52px}
+ body.screen-game main{height:calc(100dvh - 52px);max-width:1440px}
+ body.screen-game .room{gap:6px}
+ body.screen-game .room-heading h1{font-size:16px}
+ body.screen-game .room-heading p{font-size:12px}
+ body.screen-game .game-status{padding:8px 12px;column-gap:16px}
+ body.screen-game .game-status .kicker{font-size:12px}
+ body.screen-game .prompt-line h2{font-size:15px}
+ body.screen-game .word-count{font-size:17px;padding:4px 8px}
+ body.screen-game .hint-state{font-size:12px}
+ body.screen-game .word-tile{width:38px;height:38px;font-size:18px}
+ body.screen-game .timer{font-size:15px;padding:7px 10px}
+ body.screen-game .answer-slots{font-size:12px;gap:4px}
+ body.screen-game .answer-slot{width:11px;height:11px}
+ body.screen-game .whistle{font-size:12px;padding:8px 10px}
+ body.screen-game .gauge-heading{font-size:11px}
+ body.screen-game .gauge-band{font-size:13px;padding:5px 1px}
+ body.screen-game .game-players{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:center}
+ body.screen-game .game-player{display:grid;grid-template-columns:40px minmax(0,1fr);grid-template-rows:auto auto;align-content:center;column-gap:8px;min-height:54px;padding:6px 8px}
+ body.screen-game .game-player .avatar{width:40px;height:40px;font-size:23px}
+ body.screen-game .game-player-name{font-size:13px;text-align:left;width:auto;line-height:1.2}
+ body.screen-game .game-player-score{font-size:12px;line-height:1.2}
+ body.screen-game .game-player.is-drawer .game-player-role{max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+ body.screen-game .tools:not(.hidden){gap:14px}
+ body.screen-game .colors{grid-template-columns:repeat(3,38px);gap:10px}
+ body.screen-game .colors button{width:38px;height:38px}
+ body.screen-game .tool-actions{width:130px;gap:8px}
+ body.screen-game .tool-button:not(.whistle),body.screen-game .brush-menu summary{min-height:38px;font-size:12px;padding:9px}
+ body.screen-game .room-side{height:clamp(135px,17dvh,180px)}
+ body.screen-game:not(.chat-open) .chat-panel{grid-template-columns:135px minmax(0,1fr) minmax(250px,32%)}
+ body.screen-game:not(.chat-open) .chat-heading h2{font-size:16px}
+ body.screen-game:not(.chat-open) .chat-message-meta{font-size:11px}
+ body.screen-game:not(.chat-open) .chat-message-text{font-size:13px;padding:5px 9px}
+ body.screen-game .chat-form input{height:44px}
+}
+/* A narrow desktop window needs a compact, still legible member column. */
+@media(min-width:701px) and (max-width:1099px){
+ body.screen-game .game-status{column-gap:8px}
+ body.screen-game .word-tile{width:30px;height:32px;font-size:15px}
+ body.screen-game .prompt-line h2,body.screen-game .game-status .kicker,body.screen-game .answer-slots{font-size:11px}
+ body.screen-game .word-count{font-size:14px}
+ body.screen-game .timer{font-size:12px;padding:5px 7px}
+ body.screen-game .game-players{grid-template-columns:1fr;gap:3px}
+ body.screen-game .game-player{grid-template-columns:28px minmax(0,1fr);min-height:34px;padding:3px 5px;column-gap:5px}
+ body.screen-game .game-player .avatar{width:28px;height:28px;font-size:16px}
+ body.screen-game .game-player-name{font-size:11px}
+ body.screen-game .game-player-score{font-size:10px}
+ body.screen-game .game-player.is-drawer .game-player-role{font-size:9px}
+ body.screen-game .colors{grid-template-columns:repeat(3,30px);gap:6px}
+ body.screen-game .colors button{width:30px;height:30px}
+ body.screen-game .tool-actions{width:105px;gap:5px}
+ body.screen-game .tool-button:not(.whistle),body.screen-game .brush-menu summary{min-height:32px;padding:6px;font-size:11px}
+ body.screen-game:not(.chat-open) .chat-panel{grid-template-columns:100px minmax(0,1fr) minmax(180px,30%)}
+}
+@media(min-width:1150px){
+ /* On a wide monitor the prompt, time/score gauge and turn controls fit on
+    one row, leaving more height for both the canvas and the chat below. */
+ body.screen-game .game-status{grid-template-columns:minmax(330px,1fr) minmax(280px,1.15fr) auto;align-items:center}
+ body.screen-game .prompt-line{grid-column:1;grid-row:1}
+ body.screen-game .score-gauge{grid-column:2;grid-row:1;align-self:center}
+ body.screen-game .game-status-top{grid-column:3;grid-row:1}
+}
+@media(min-width:701px) and (max-width:1099px){body.screen-game:not(.chat-open) .chat-panel{grid-template-columns:125px minmax(0,1fr) minmax(180px,30%);gap:8px}}
+@media(min-width:701px) and (max-height:700px){
+ body.screen-game .game-players{gap:4px}
+ body.screen-game .game-player{min-height:44px;padding:4px 6px;grid-template-columns:34px minmax(0,1fr)}
+ body.screen-game .game-player .avatar{width:34px;height:34px;font-size:19px}
+ body.screen-game .colors{grid-template-columns:repeat(3,30px);gap:6px}
+ body.screen-game .colors button{width:30px;height:30px}
+ body.screen-game .tools:not(.hidden){gap:8px}
+ body.screen-game .tool-actions{gap:5px}
+ body.screen-game .tool-button:not(.whistle),body.screen-game .brush-menu summary{min-height:32px;padding:6px}
+}
+@media(min-width:701px) and (max-width:1099px) and (max-height:700px){
+ body.screen-game .game-player{min-height:26px;grid-template-columns:22px minmax(0,1fr);padding:2px 4px}
+ body.screen-game .game-player .avatar{width:22px;height:22px;font-size:13px}
+ body.screen-game .game-player-name{font-size:10px}
+ body.screen-game .game-player-score{font-size:9px}
+}
+@media(min-width:701px) and (max-height:550px){body.screen-game main{height:auto;min-height:calc(100dvh - 52px)}}
+@media(min-width:701px){body.screen-game:not(.chat-open) .chat-heading h2{font-size:14px;white-space:nowrap}}
+@media(min-width:1100px) and (max-width:1300px){
+ body.screen-game .game-players{grid-template-columns:1fr;gap:4px}
+ body.screen-game .game-player{min-height:38px;grid-template-columns:30px minmax(0,1fr);padding:3px 6px}
+ body.screen-game .game-player .avatar{width:30px;height:30px;font-size:17px}
+ body.screen-game .game-player-name{font-size:12px}
+ body.screen-game .game-player-score{font-size:10px}
+}
+@media(min-width:701px) and (max-width:1300px) and (max-height:700px){
+ body.screen-game .game-player{min-height:26px;grid-template-columns:22px minmax(0,1fr);padding:2px 4px}
+ body.screen-game .game-player .avatar{width:22px;height:22px;font-size:13px}
+ body.screen-game .game-player-name{font-size:10px}
+ body.screen-game .game-player-score{font-size:9px}
+ body.screen-game .game-player.is-drawer{padding-right:22px}
+ body.screen-game .game-player.is-drawer .game-player-role{left:auto;right:2px;top:2px;width:17px;height:17px;display:grid;place-items:center;border-radius:50%;padding:0;font-size:0;overflow:hidden}
+ body.screen-game .game-player.is-drawer .game-player-role::after{content:'✎';font-size:12px}
+}
