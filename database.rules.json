@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": "auth != null && data.child('players').child(auth.uid).exists()",
+        ".write": false
+      }
+    },
+    "secrets": {".read": false, ".write": false},
+    "drawings": {
+      "$room": {
+        "$turn": {
+          ".read": "auth != null && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
+          "$stroke": {
+            ".write": "auth != null && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('drawer').val() == auth.uid && root.child('rooms').child($room).child('turn').val() + '' == $turn && !data.exists()",
+            ".validate": "newData.hasChildren(['color', 'width', 'points']) && newData.child('points').isString() && newData.child('points').val().length <= 16000 && newData.child('color').isString() && newData.child('width').isNumber() && newData.child('width').val() >= 1 && newData.child('width').val() <= 30"
+          }
+        }
+      }
+    }
+  }
+}
