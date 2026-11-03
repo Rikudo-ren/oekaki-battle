@@ -1,5 +1,7 @@
 const sources = {
   turn: '/sounds/click1.wav',
+  tick: '/sounds/make10-tick.mp3',
+  go: '/sounds/make10-go.mp3',
   hint: '/sounds/notification-attention-soft.wav',
   correct: '/sounds/notification-success-sparkle.wav',
   timeout: '/sounds/notification-failure-pluck.wav',
@@ -43,4 +45,18 @@ export function setSoundEnabled(value) {
   enabled = value;
   try { localStorage.setItem('oekaki-sound', enabled ? 'on' : 'off'); } catch {}
   if (enabled) unlockAudio();
+}
+
+// A short two-tone whistle signals the end before the answer is revealed.
+export function playWhistle() {
+  if (!enabled || !context || context.state !== 'running') return;
+  try {
+    const now=context.currentTime;
+    for (const [start,duration] of [[0,0.24],[0.31,0.46]]) {
+      const osc=context.createOscillator(),gain=context.createGain(),t=now+start;
+      osc.type='sine';osc.frequency.setValueAtTime(1880,t);osc.frequency.linearRampToValueAtTime(1980,t+duration);
+      gain.gain.setValueAtTime(0.0001,t);gain.gain.linearRampToValueAtTime(0.12,t+0.025);gain.gain.setValueAtTime(0.12,t+duration-0.04);gain.gain.linearRampToValueAtTime(0.0001,t+duration);
+      osc.connect(gain);gain.connect(context.destination);osc.start(t);osc.stop(t+duration);
+    }
+  } catch { /* Audio must never interrupt play. */ }
 }

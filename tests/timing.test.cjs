@@ -23,9 +23,18 @@ test('時間ありは早いほど高得点、期限の直前まで最低1点', a
 test('Firebaseルールで正解と時間切れの条件にサーバー時刻を使う', () => {
   const rules=JSON.parse(readFileSync('database.rules.json','utf8')).rules;
   const claim=rules.claims.$room.$game.$turn;
-  assert.match(claim['.write'],/!data\.exists/);
-  assert.match(claim['.validate'],/newData\.child\('at'\)\.val\(\) == now/);
-  assert.match(claim['.validate'],/now < /);
-  assert.match(claim['.validate'],/now >= /);
-  assert.match(rules.secrets.$room.$game.$turn['.read'],/timeout/);
+  assert.match(claim['.write'],/!data\.child\('ended'\)\.exists/);
+  assert.match(claim['.validate'],/child\('at'\)\.val\(\) == now/);
+  assert.match(claim['.write'],/now < /);
+  assert.match(claim['.write'],/now >= /);
+  assert.match(rules.verified.$room.$game.$turn.$uid['.validate'],/secrets/);
+  assert.match(rules.secrets.$room.$game.$turn['.read'],/2000/);
+});
+test('配点を変更でき、順位では変わらない', async () => {
+  const {scoreForClaim} = await import('../src/timing.mjs');
+  const settings={minPoints:2,maxPoints:10,flatPoints:4};
+  assert.equal(scoreForClaim({startedAt:1000,duration:100,at:1001},settings),10);
+  assert.equal(scoreForClaim({startedAt:1000,duration:100,at:100999},settings),2);
+  assert.equal(scoreForClaim({startedAt:1000,duration:0,at:100999},settings),4);
+  assert.equal(scoreForClaim({startedAt:1000,duration:100,at:1001},{...settings,minPoints:4,maxPoints:4}),4);
 });
