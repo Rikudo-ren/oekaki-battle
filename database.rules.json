@@ -15,7 +15,7 @@
       "$room": {
         "$game": {
           "$turn": {
-            ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('drawer').val() == auth.uid && root.child('rooms').child($room).child('turn').val() + '' == $turn",
+            ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('players').child(auth.uid).exists() && (root.child('rooms').child($room).child('drawer').val() == auth.uid || root.child('claims').child($room).child($game).child($turn).child('kind').val() == 'timeout')",
             ".write": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('host').val() == auth.uid && root.child('rooms').child($room).child('phase').val() == 'starting'",
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 30"
           }
@@ -27,8 +27,8 @@
         "$game": {
           ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
           "$turn": {
-            ".write": "auth != null && !data.exists() && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('drawer').val() != auth.uid && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
-            ".validate": "newData.hasChildren(['uid', 'answer']) && newData.child('uid').val() == auth.uid && newData.child('answer').isString() && newData.child('answer').val() == root.child('secrets').child($room).child($game).child($turn).val()"
+            ".write": "auth != null && !data.exists() && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['uid', 'kind', 'at', 'startedAt', 'duration']) && newData.child('uid').val() == auth.uid && newData.child('at').isNumber() && newData.child('at').val() == now && newData.child('startedAt').isNumber() && newData.child('duration').isNumber() && newData.child('startedAt').val() == root.child('rooms').child($room).child('turnStartedAt').val() && newData.child('duration').val() == root.child('rooms').child($room).child('timeLimit').val() && ((newData.child('kind').val() == 'answer' && root.child('rooms').child($room).child('drawer').val() != auth.uid && newData.child('answer').isString() && newData.child('answer').val() == root.child('secrets').child($room).child($game).child($turn).val() && (newData.child('duration').val() == 0 || now < newData.child('startedAt').val() + newData.child('duration').val() * 1000)) || (newData.child('kind').val() == 'timeout' && newData.child('duration').val() > 0 && now >= newData.child('startedAt').val() + newData.child('duration').val() * 1000 && !newData.hasChild('answer')))"
           }
         }
       }
@@ -39,8 +39,32 @@
           "$turn": {
             ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
             "$stroke": {
-              ".write": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('drawer').val() == auth.uid && root.child('rooms').child($room).child('turn').val() + '' == $turn && !root.child('claims').child($room).child($game).child($turn).exists() && !data.exists()",
-              ".validate": "newData.hasChildren(['color', 'width', 'points']) && newData.child('points').isString() && newData.child('points').val().length <= 16000 && newData.child('color').isString() && newData.child('width').isNumber() && newData.child('width').val() >= 1 && newData.child('width').val() <= 30"
+              ".write": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('drawer').val() == auth.uid && root.child('rooms').child($room).child('turn').val() + '' == $turn && !root.child('claims').child($room).child($game).child($turn).exists() && !data.exists() && (root.child('rooms').child($room).child('timeLimit').val() == 0 || (root.child('rooms').child($room).child('timeLimit').isNumber() && now < root.child('rooms').child($room).child('turnStartedAt').val() + root.child('rooms').child($room).child('timeLimit').val() * 1000))",
+              ".validate": "(newData.hasChildren(['color', 'width', 'points']) && newData.child('points').isString() && newData.child('points').val().length <= 16000 && newData.child('color').isString() && newData.child('width').isNumber() && newData.child('width').val() >= 1 && newData.child('width').val() <= 30) || (newData.hasChild('action') && (newData.child('action').val() == 'undo' || newData.child('action').val() == 'clear') && !newData.hasChild('points'))"
+            }
+          }
+        }
+      }
+    },
+    "chats": {
+      "$room": {
+        "$game": {
+          ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
+          "$message": {
+            ".write": "auth != null && !data.exists() && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['uid', 'name', 'text', 'at']) && newData.child('uid').val() == auth.uid && newData.child('name').val() == root.child('rooms').child($room).child('players').child(auth.uid).child('name').val() && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 200 && newData.child('at').isNumber()"
+          }
+        }
+      }
+    },
+    "hints": {
+      "$room": {
+        "$game": {
+          "$turn": {
+            ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('players').child(auth.uid).exists() && root.child('rooms').child($room).child('timeLimit').isNumber() && root.child('rooms').child($room).child('hintSeconds').isNumber() && root.child('rooms').child($room).child('hintSeconds').val() > 0 && root.child('rooms').child($room).child('hintSeconds').val() < root.child('rooms').child($room).child('timeLimit').val() && root.child('rooms').child($room).child('turnStartedAt').isNumber() && now >= root.child('rooms').child($room).child('turnStartedAt').val() + (root.child('rooms').child($room).child('timeLimit').val() - root.child('rooms').child($room).child('hintSeconds').val()) * 1000 && !root.child('claims').child($room).child($game).child($turn).exists()",
+            ".write": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('host').val() == auth.uid && root.child('rooms').child($room).child('phase').val() == 'starting'",
+            "$slot": {
+              ".validate": "($slot == 'p0' || $slot == 'p1' || $slot == 'p2' || $slot == 'p3' || $slot == 'p4' || $slot == 'p5') && newData.isString() && newData.val().length == 1"
             }
           }
         }
