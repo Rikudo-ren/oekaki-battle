@@ -35,3 +35,13 @@ test('正解を伏せたチャットだけを保存し、発表前の答え本�
  const secret=rules.secrets.$room.$game.$turn['.read'];
  assert.match(secret,/players/);assert.match(secret,/child\('ended'\).*2000/);
 });
+
+test('パスは描き手のみ正解前に確定し、次のお題はGMだけが準備できる',()=>{
+ const pass=rules.passCandidates.$room.$game.$turn,claim=rules.claims.$room.$game.$turn;
+ assert.match(pass['.write'],/drawer.*auth.uid/);assert.match(pass['.write'],/!.*slots.*exists/);
+ assert.match(pass['.validate'],/child\('secrets'\)/);assert.match(pass['.read'],/host.*reason.*pass/);
+ assert.match(claim['.write'],/reason'\).val\(\) == 'pass'.*!data.child\('slots'\).exists\(\).*passCandidates/);
+ assert.match(claim.ended.reason['.validate'],/pass/);
+ for(const path of [rules.secrets.$room.$game.$turn,rules.hints.$room.$game.$turn])assert.match(path['.write'],/host.*nextTurnIndex.*pass.*2000/);
+ for(const root of ['secrets','claims','drawings','chats','hints','verified','chatGuard','passCandidates']){const rule=rules[root].$room.$game['.write'];assert.match(rule,/host/);assert.match(rule,/starting/);}
+});

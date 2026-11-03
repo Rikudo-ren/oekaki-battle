@@ -68,3 +68,36 @@ test('Realtime Database: 非公開のお題、複数正解の競合と結果発�
     console.log('Firebase Emulator のルール・同時受付テストに成功しました。');
   } finally { await env.cleanup(); }
 });
+
+test('Realtime Database: 描き手のパス、正解との競合、GM権限と再開',async()=>{
+  const env=await initializeTestEnvironment({projectId:'demo-oekaki-pass',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+  try{
+    const started=Date.now()-5000;
+    const room={host:'host',phase:'playing',gameId:'game',players:{host:{name:'host',score:0},drawer:{name:'drawer',score:0},alice:{name:'alice',score:0}},drawer:'drawer',turn:0,nextTurnIndex:8,turnStartedAt:started,timeLimit:60,maxCorrect:2};
+    await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/PASS01').set(room);await c.database().ref('secrets/PASS01/game/0').set('ねこ');});
+    const db=uid=>env.authenticatedContext(uid).database();
+    const candidate='passCandidates/PASS01/game/0',claim='claims/PASS01/game/0',next='secrets/PASS01/game/8';
+    await assertFails(db('alice').ref(candidate).set('いぬ'));
+    await assertFails(db('drawer').ref(candidate).set('ねこ'));
+    await assertSucceeds(db('drawer').ref(candidate).set('いぬ'));
+    await assertFails(db('alice').ref(candidate).get());await assertFails(db('host').ref(candidate).get());
+    await assertFails(db('alice').ref(claim).set({ended:{reason:'pass',at:timestamp}}));
+    await assertSucceeds(db('drawer').ref(claim).set({ended:{reason:'pass',at:timestamp}}));
+    assert.equal((await assertSucceeds(db('host').ref(candidate).get())).val(),'いぬ');
+    await assertFails(db('host').ref(next).set('いぬ'));
+    await assertFails(db('alice').ref('verified/PASS01/game/0/alice').set('ねこ'));
+    await new Promise(resolve=>setTimeout(resolve,2200));
+    await assertFails(db('drawer').ref(next).set('いぬ'));await assertFails(db('host').ref(next).set('さる'));
+    await assertSucceeds(db('host').ref(next).set('いぬ'));
+    await assertSucceeds(db('host').ref('hints/PASS01/game/8').set({p0:'い'}));
+    await assertFails(db('alice').ref('rooms/PASS01').update({phase:'lobby'}));
+    await assertSucceeds(db('host').ref('rooms/PASS01').update({phase:'lobby'}));
+    // A completed claim must beat a concurrent pass; the drawer may not discard points.
+    await env.withSecurityRulesDisabled(async c=>{
+      await c.database().ref('rooms/PASS01').set(room);
+      await c.database().ref(claim).set({slots:{s0:{uid:'alice',at:started+3500,startedAt:started+3000,duration:60}}});
+    });
+    await assertFails(db('drawer').ref(candidate).set('いぬ'));
+    await assertFails(db('drawer').ref(claim).transaction(value=>({...value,ended:{reason:'pass',at:timestamp}}),undefined,false));
+  }finally{await env.cleanup();}
+});

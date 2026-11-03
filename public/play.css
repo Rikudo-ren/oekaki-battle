@@ -315,3 +315,14 @@ body.screen-game .chat-message.is-correct .chat-message-text{background:#fff4bb;
 @media(max-width:700px){body.screen-game .game-players{padding-top:13px}}
 body.screen-game .game-player.is-drawer .game-player-role{top:-14px;padding:3px 6px;font-size:10px}
 @media(max-width:700px){body.screen-game .game-players{padding-top:16px}}
+/* Compact GM controls and a separate shared pass announcement. */
+body.screen-game .pass-button{background:#fff0bd!important;color:#98601b!important;white-space:nowrap}
+body.screen-game .pass-button:disabled{opacity:.45}
+.round-end.is-pass{background:rgba(36,71,97,.80)}
+.round-end.is-pass .round-end-card{background:#83cbd6;border-color:#efffff;box-shadow:0 8px 0 #438eaa,0 18px 50px #0b293c99;color:#226178}
+.round-end.is-pass .round-end-card strong{text-shadow:0 4px 0 #4d9caf,2px 7px 0 #34758d}
+.gm-actions{display:grid;gap:8px;padding:20px}.gm-actions p{margin:0;font-size:13px}.gm-actions button{width:100%;min-height:44px}.gm-actions small{font-size:12px;color:#5c7180}.gm-actions .gm-danger{color:#a53d3d;border-color:#e4a3a3;background:#fff4f2}
+@media(max-width:700px){
+ body.screen-game .tool-actions{min-width:0;gap:3px}
+ body.screen-game .brush-menu summary,body.screen-game .tool-button:not(.whistle){font-size:9px;padding:5px}
+}
