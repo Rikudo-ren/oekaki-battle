@@ -67,3 +67,6 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Generated from Firebase environment variables during build
+public/firebase-config.js
