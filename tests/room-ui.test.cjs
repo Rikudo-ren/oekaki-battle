@@ -105,6 +105,41 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
  const newGame=getPath(`rooms/${code}/gameId`);write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait(250);await sendChat(guest,getPath(`secrets/${code}/${newGame}/0`));assert.equal(getPath(`claims/${code}/${newGame}/0/slots/s0/uid`),'guest');
  host.dom.window.close();guest.dom.window.close();data={};subs=[];
 }
+// Play a full two-person lap through the normal result screens, then replay.
+{
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
+ write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/order`,['host','guest']);write(`rooms/${code}/schedule`,['host','guest']);write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait();
+ await sendChat(guest,getPath(`secrets/${code}/${game}/0`));write(`claims/${code}/${game}/0/ended/at`,Date.now()-2200);notify([`claims/${code}/${game}/0`]);await wait(400);host.d.querySelector('#next').click();await wait();
+ assert.equal(getPath(`rooms/${code}/turn`),1);write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}/turnStartedAt`]);await wait(250);await sendChat(host,getPath(`secrets/${code}/${game}/1`));write(`claims/${code}/${game}/1/ended/at`,Date.now()-2200);notify([`claims/${code}/${game}/1`]);await wait(400);host.d.querySelector('#next').click();await wait();
+ assert.equal(getPath(`rooms/${code}/phase`),'finished');assert.match(host.d.querySelector('#result').textContent,/ポイント/);host.d.querySelector('#again').click();await wait(250);assert.equal(getPath(`rooms/${code}/phase`),'playing');assert.equal(getPath(`rooms/${code}/turn`),2);assert.equal(getPath(`rooms/${code}/extraRounds`),1);assert.match(host.d.querySelector('#game-players').textContent,/ゲスト.*1 pt/);assert.match(host.d.querySelector('#game-players').textContent,/ホスト.*1 pt/);
+ host.dom.window.close();guest.dom.window.close();data={};subs=[];
+}
+// At a normal finish, only the GM chooses; another round keeps scores and
+// uses fresh IDs even when earlier passes consumed reserved turn numbers.
+{
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#time-limit').value='60';host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
+ write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait();await sendChat(guest,getPath(`secrets/${code}/${game}/0`));
+ write(`claims/${code}/${game}/0/ended/at`,Date.now()-2200);write(`rooms/${code}/schedule`,['host','guest','host','guest','host','guest','host','guest']);write(`rooms/${code}/scheduleIndex`,7);write(`rooms/${code}/nextTurnIndex`,10);write(`rooms/${code}/phase`,'finished');notify([`rooms/${code}`,`claims/${code}/${game}/0`]);await wait(350);
+ assert.equal(host.d.querySelector('#final-controls').classList.contains('hidden'),false);assert.equal(host.d.querySelector('#final-host-actions').classList.contains('hidden'),false);assert.equal(guest.d.querySelector('#final-host-actions').classList.contains('hidden'),true);assert.equal(guest.d.querySelector('#final-wait').classList.contains('hidden'),false);
+ guest.d.querySelector('#again').click();await wait();assert.equal(getPath(`rooms/${code}/phase`),'finished');
+ host.d.querySelector('#again').click();await wait(200);assert.equal(getPath(`rooms/${code}/phase`),'playing');assert.equal(getPath(`rooms/${code}/gameId`),game);assert.equal(getPath(`rooms/${code}/scheduleIndex`),8);assert.equal(getPath(`rooms/${code}/turn`),10);assert.equal(getPath(`rooms/${code}/extraRounds`),1);assert.equal(getPath(`rooms/${code}/nextTurnIndex`),18);assert.equal(getPath(`rooms/${code}/turnIds/8`),10);assert.ok(getPath(`secrets/${code}/${game}/10`));assert.ok(getPath(`hints/${code}/${game}/10`));assert.match(host.d.querySelector('#game-players').textContent,/ゲスト.*5 pt/);
+ write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait(250);await sendChat(guest,getPath(`secrets/${code}/${game}/10`));write(`claims/${code}/${game}/10/ended/at`,Date.now()-2200);notify([`claims/${code}/${game}/10`]);await wait(400);assert.match(host.d.querySelector('#game-players').textContent,/ゲスト.*10 pt/);host.d.querySelector('#next').click();await wait();assert.equal(getPath(`rooms/${code}/turn`),11);assert.equal(getPath(`rooms/${code}/scheduleIndex`),9);
+ write(`rooms/${code}/phase`,'finished');notify([`rooms/${code}`]);await wait();host.d.querySelector('#lobby-return').click();await wait();assert.equal(getPath(`rooms/${code}/phase`),'lobby');assert.ok(host.d.querySelector('#settings-dialog').hasAttribute('open'));assert.equal(host.d.querySelector('#time-limit').value,'60');assert.equal(getPath(`rooms/${code}/players/guest/score`),10);assert.ok(getPath(`rooms/${code}/players/host`));
+ // The previously supplied old rules deny cleanup. Report the actual cause,
+ // return to the lobby, and allow a retry after the rules are updated.
+ host.d.querySelector('#settings-close').click();const realSet=host.w.__firebaseMocks.set;host.w.__firebaseMocks.set=async(p,v)=>{if(v===null&&p.endsWith(`/${code}/${game}`)){const e=Error('permission_denied');e.code='PERMISSION_DENIED';throw e;}return realSet(p,v);};
+ host.d.querySelector('#start').click();await wait(250);assert.equal(getPath(`rooms/${code}/phase`),'lobby');assert.match(host.d.querySelector('#toast').textContent,/最新のFirebaseルール/);host.w.__firebaseMocks.set=realSet;
+ host.d.querySelector('#start').click();await wait(300);assert.equal(getPath(`rooms/${code}/phase`),'playing');assert.notEqual(getPath(`rooms/${code}/gameId`),game);assert.equal(getPath(`rooms/${code}/players/guest/score`),0);
+ host.dom.window.close();guest.dom.window.close();data={};subs=[];
+}
+// If the host leaves while another lap is being prepared, the next host
+// sees the final screen again and can choose rather than losing the scores.
+{
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);write(`rooms/${code}/phase`,'finished');notify([`rooms/${code}`]);await wait();
+ const original=host.w.__firebaseMocks.set;let release;const blocked=new Promise(resolve=>{release=resolve;});host.w.__firebaseMocks.set=async(p,v)=>{if(p===`secrets/${code}/${game}/8`)await blocked;return original(p,v);};
+ host.d.querySelector('#again').click();await wait();assert.equal(getPath(`rooms/${code}/phase`),'starting');disconnect(host);await wait(600);assert.equal(getPath(`rooms/${code}/host`),'guest');assert.equal(getPath(`rooms/${code}/phase`),'finished');release();await wait(150);
+ guest.d.querySelector('#again').click();await wait(250);assert.equal(getPath(`rooms/${code}/phase`),'playing');assert.equal(getPath(`rooms/${code}/extraRounds`),1);guest.dom.window.close();data={};subs=[];
+}
 // If the host disconnects during the pass overlay, the elected host resumes it.
 {
  const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);

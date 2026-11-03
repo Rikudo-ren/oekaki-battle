@@ -101,3 +101,45 @@ test('Realtime Database: 描き手のパス、正解との競合、GM権限と�
     await assertFails(db('drawer').ref(claim).transaction(value=>({...value,ended:{reason:'pass',at:timestamp}}),undefined,false));
   }finally{await env.cleanup();}
 });
+
+test('Realtime Database: 終了後にロビーから再開するためのデータ削除とゲームID切り替え',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-restart',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  const roots=['secrets','claims','drawings','chats','hints','verified','chatGuard','passCandidates'];
+  await env.withSecurityRulesDisabled(async c=>{
+   const db=c.database();await db.ref('rooms/RETRY1').set({host:'host',phase:'lobby',gameId:'old',players:{host:{name:'host',score:0},guest:{name:'guest',score:1}},online:{host:{tab:true},guest:{tab:true}},hasPlayed:true});
+   for(const root of roots)await db.ref(`${root}/RETRY1/old/example`).set(true);
+  });
+  const host=env.authenticatedContext('host').database(),guest=env.authenticatedContext('guest').database();
+  await assertFails(guest.ref('rooms/RETRY1').update({phase:'starting'}));
+  await assertFails(host.ref('claims/RETRY1/old').set(null));
+  await assertSucceeds(host.ref('rooms/RETRY1').update({phase:'starting'}));
+  for(const root of roots){await assertFails(guest.ref(`${root}/RETRY1/old`).set(null));await assertSucceeds(host.ref(`${root}/RETRY1/old`).set(null));}
+  await assertSucceeds(host.ref('rooms/RETRY1').update({gameId:'new'}));
+  await assertSucceeds(host.ref('secrets/RETRY1/new/0').set('ねこ'));
+  await assertSucceeds(host.ref('hints/RETRY1/new/0').set({p0:'ね'}));
+  await assertSucceeds(host.ref('rooms/RETRY1').update({phase:'playing',turn:0,drawer:'host',turnStartedAt:timestamp,timeLimit:60,maxCorrect:1}));
+  assert.equal((await host.ref('secrets/RETRY1/new/0').get()).val(),'ねこ');
+ }finally{await env.cleanup();}
+});
+
+test('Realtime Database: 試合終了後、得点記録を残してもう一周を準備',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-again',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  await env.withSecurityRulesDisabled(async c=>{
+   const db=c.database();await db.ref('rooms/AGAIN1').set({host:'host',phase:'finished',gameId:'game',players:{host:{name:'host',score:0},guest:{name:'guest',score:0}},turn:1,drawer:'guest',timeLimit:60});
+   await db.ref('claims/AGAIN1/game/0').set({slots:{s0:{uid:'guest',at:100,startedAt:0,duration:60}},ended:{reason:'full',at:100}});
+  });
+  const host=env.authenticatedContext('host').database(),guest=env.authenticatedContext('guest').database();
+  await assertFails(guest.ref('rooms/AGAIN1').update({phase:'starting'}));
+  await assertSucceeds(host.ref('rooms/AGAIN1').update({phase:'starting',startOrigin:'finished'}));
+  await assertFails(guest.ref('secrets/AGAIN1/game/8').set('ねこ'));
+  await assertSucceeds(host.ref('secrets/AGAIN1/game/8').set('ねこ'));
+  await assertSucceeds(host.ref('hints/AGAIN1/game/8').set({p0:'ね'}));
+  await assertFails(guest.ref('secrets/AGAIN1/game/8').get());
+  await assertSucceeds(host.ref('rooms/AGAIN1').update({phase:'playing',turn:8,drawer:'host',turnStartedAt:timestamp}));
+  assert.equal((await host.ref('claims/AGAIN1/game/0').get()).val().slots.s0.uid,'guest');
+  await assertFails(guest.ref('secrets/AGAIN1/game/8').get());
+  assert.equal((await host.ref('secrets/AGAIN1/game/8').get()).val(),'ねこ');
+ }finally{await env.cleanup();}
+});

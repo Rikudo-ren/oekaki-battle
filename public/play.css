@@ -326,3 +326,11 @@ body.screen-game .pass-button:disabled{opacity:.45}
  body.screen-game .tool-actions{min-width:0;gap:3px}
  body.screen-game .brush-menu summary,body.screen-game .tool-button:not(.whistle){font-size:9px;padding:5px}
 }
+/* After the match, keep the choice visible without leaving the room. */
+body.screen-game .final-controls{flex:none}
+body.screen-game .final-actions:not(.hidden){display:flex;gap:8px}
+body.screen-game .final-actions button{flex:1;width:auto;height:40px;margin:0;padding:5px;font-size:13px}
+body.screen-game .final-actions .primary{background:#ff875e;box-shadow:0 3px 0 #d76748}
+body.screen-game .final-actions .outline{background:#fff;color:#23799d}
+body.screen-game .final-controls p{margin:0;text-align:center;font-size:12px;color:#337697}
+@media(max-height:700px) and (max-width:700px){body.screen-game .final-actions button{height:34px;font-size:11px}}
