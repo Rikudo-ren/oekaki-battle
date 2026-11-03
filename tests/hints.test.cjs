@@ -2,19 +2,21 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 
-test('お題はすべて異なる3〜6文字のひらがな', async () => {
+test('お題はすべて異なる2〜6文字のひらがな', async () => {
   const { topics } = await import('../src/topics.mjs');
-  assert.ok(topics.length >= 40);
+  assert.ok(topics.length >= 1000);
   assert.equal(new Set(topics).size, topics.length);
+  assert.ok(topics.includes('ねこ'));
+  for (const unwanted of ['こねこ', 'かばさん', 'こうま', 'こぶた', 'こじか', 'こひつじ', 'といれっと', 'りすざる', 'ばすけっと']) assert.ok(!topics.includes(unwanted), unwanted);
   for (const word of topics) {
     assert.match(word, /^[\u3041-\u3096ー]+$/);
-    assert.ok(Array.from(word).length >= 3 && Array.from(word).length <= 6, word);
+    assert.ok(Array.from(word).length >= 2 && Array.from(word).length <= 6, word);
   }
 });
 
-test('3・4文字は1文字、5・6文字は異なる2文字を公開', async () => {
+test('2・3・4文字は1文字、5・6文字は異なる2文字を公開', async () => {
   const { createHint, hintCharacters } = await import('../src/hints.mjs');
-  const words = ['うさぎ', 'ぺんぎん', 'おにぎりや', 'とうもろこし'];
+  const words = ['ねこ', 'うさぎ', 'ぺんぎん', 'おにぎりや', 'とうもろこし'];
   for (const word of words) {
     const hint = createHint(word, indices => [...indices].reverse());
     const expected = Array.from(word).length <= 4 ? 1 : 2;
@@ -23,7 +25,8 @@ test('3・4文字は1文字、5・6文字は異なる2文字を公開', async ()
     assert.equal(visible.filter(Boolean).length, expected);
     visible.forEach((char, index) => { if (char) assert.equal(char, Array.from(word)[index]); });
   }
-  assert.throws(() => createHint('ねこ', indices => indices));
+  assert.deepEqual(createHint('ねこ', indices => indices), { p0: 'ね' });
+  assert.throws(() => createHint('ね', indices => indices));
   assert.throws(() => createHint('あいうえおかき', indices => indices));
 });
 

@@ -1,0 +1,10 @@
+BGM credits
+
+bgm-room.mp3: "Welcome to the machine" by Komiku
+bgm-play.mp3: "Action Techno" by Komiku
+
+License: CC0 1.0 Universal (public domain dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+These versions were looped and volume-adjusted by the MAKE10 project:
+https://github.com/Rikudo-ren/make10/blob/main/docs/AUDIO.md
