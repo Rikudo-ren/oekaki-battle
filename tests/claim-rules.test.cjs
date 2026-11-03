@@ -21,3 +21,17 @@ test('未終了の回答や開始前の描画にはサーバー時刻と秘密�
   assert.match(rules.drawings.$room.$game.$turn.$stroke['.write'],/now >= .*3000/);
   assert.match(rules.secrets.$room.$game.$turn['.read'],/child\('ended'\).*2000/);
 });
+
+
+test('正解を伏せたチャットだけを保存し、発表前の答え本文を拒否するルール',()=>{
+ const rules=JSON.parse(require('node:fs').readFileSync('database.rules.json','utf8')).rules;
+ const chat=rules.chats.$room.$game.$message;
+ assert.match(chat['.validate'],/child\('text'\).*●●●/);
+ assert.match(chat['.validate'],/child\('verified'\)/);
+ assert.match(chat['.validate'],/child\('secrets'\)/);
+ assert.match(chat['.validate'],/ended.*now.*2000/);
+ assert.equal(chat.$other['.validate'],false);
+ const guard=rules.chatGuard.$room.$game.$turn.$uid;assert.match(guard['.write'],/auth.uid == \$uid/);assert.match(guard['.write'],/child\('ended'\)/);assert.equal(guard['.validate'],'newData.val() == true');assert.equal(guard['.read'],undefined);
+ const secret=rules.secrets.$room.$game.$turn['.read'];
+ assert.match(secret,/players/);assert.match(secret,/child\('ended'\).*2000/);
+});

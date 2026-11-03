@@ -215,3 +215,103 @@ body.screen-game .game-player.is-drawer .game-player-role{left:27px;top:-4px}
  body.screen-game .result{max-height:44px}
  body.screen-game #next{height:34px}
 }
+
+/* A turn ends for everyone at once. It never blocks input or outlives the
+   server-timed reveal, so reconnects do not replay an old announcement. */
+.round-end{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(10,39,58,.78);pointer-events:none}
+.round-end-card{display:flex;flex-direction:column;align-items:center;gap:5px;padding:18px 38px;transform:rotate(-3deg);border:4px solid #fff3c7;border-radius:22px;background:#ffce4b;box-shadow:0 8px 0 #d28c31,0 18px 50px #0b293c99;color:#7b421e;animation:end-pop .3s ease-out}
+.round-end-card span{font-size:12px;font-weight:900;letter-spacing:.25em}
+.round-end-card strong{font-size:clamp(52px,13vw,104px);line-height:1.05;color:#fff;text-shadow:0 4px 0 #d8733e,2px 7px 0 #a8502d}
+@keyframes end-pop{from{opacity:0;transform:rotate(-6deg) scale(.65)}70%{transform:rotate(-2deg) scale(1.07)}to{opacity:1;transform:rotate(-3deg) scale(1)}}
+@media(prefers-reduced-motion:reduce){.round-end-card{animation:none}}
+
+/* Wide screens: use the space beside the square for players and tools,
+   leaving the center as tall as possible and a proper chat below. */
+@media(min-width:701px){
+ body.screen-game .room{gap:5px;padding-top:5px}
+ body.screen-game .room-heading{min-height:25px}
+ body.screen-game #game{gap:5px}
+ body.screen-game .game-status{display:flex;align-items:center;gap:12px;padding:6px 10px}
+ body.screen-game .game-status-top{order:2;margin:0 0 0 auto}
+ body.screen-game .prompt-line{order:1;flex:none}
+ body.screen-game .game-status p{display:none}
+ body.screen-game .game-stage{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,2fr) minmax(120px,1fr);grid-template-rows:minmax(0,1fr);gap:8px;padding:6px}
+ body.screen-game .canvas-wrap{grid-column:2;grid-row:1;height:100%}
+ body.screen-game .game-players{grid-column:1;grid-row:1;align-content:center;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0}
+ body.screen-game .tools:not(.hidden){grid-column:3;grid-row:1;align-self:center;justify-self:center;display:flex;flex-direction:column;align-items:center;gap:12px;padding:0}
+ body.screen-game .colors{display:grid;grid-template-columns:repeat(3,32px);gap:9px}
+ body.screen-game .colors button{width:32px;height:32px}
+ body.screen-game .tool-actions{display:flex;flex-direction:column;align-items:stretch;width:110px;gap:7px}
+ body.screen-game .tool-button:not(.whistle),body.screen-game .brush-menu summary{text-align:center;min-height:34px}
+ body.screen-game .room-side{height:clamp(145px,19dvh,180px)}
+ body.screen-game:not(.chat-open) .chat-panel{grid-template-columns:120px minmax(0,1fr) minmax(220px,32%);gap:10px}
+ body.screen-game:not(.chat-open) .chat-messages{overflow-y:auto}
+}
+/* On phones all eight avatars fit on one compact row. The room-exit control
+   shares the header, and chat gives its history the space once used by a title. */
+@media(max-width:700px){
+ body.screen-game .brand>span:last-child{display:none}
+ body.screen-game .room-heading{position:fixed;z-index:5;top:8px;left:49px;min-height:0}
+ body.screen-game .room-heading>div{display:none}
+ body.screen-game .room{padding-top:4px;gap:4px}
+ body.screen-game .room-layout{gap:5px}
+ body.screen-game #game{gap:4px}
+ body.screen-game .game-status{padding:5px 8px}
+ body.screen-game .game-status p{display:none}
+ body.screen-game .game-stage{padding:4px}
+ body.screen-game .game-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(30px,1fr));gap:3px;padding:4px 0 0}
+ body.screen-game .game-player{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;padding:2px 1px;min-width:0;overflow:visible}
+ body.screen-game .game-player .avatar{width:30px;height:30px;font-size:18px;flex:none;border-radius:9px}
+ body.screen-game .game-player-name{display:block;flex:none;width:100%;text-align:center;font-size:9px;line-height:1.1}
+ body.screen-game .game-player-score{font-size:9px;line-height:1.1}
+ body.screen-game .game-player.is-drawer .game-player-role{left:auto;right:0;top:-3px}
+ body.screen-game .room-side{height:clamp(112px,17dvh,145px)}
+ body.screen-game:not(.chat-open) .chat-panel{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:minmax(0,1fr) auto;gap:4px;padding:6px 8px}
+ body.screen-game:not(.chat-open) .chat-heading{grid-column:2;grid-row:2;min-height:0;align-self:center}
+ body.screen-game:not(.chat-open) .chat-heading>div{display:none}
+ body.screen-game:not(.chat-open) .chat-feed{grid-column:1 / 3;grid-row:1;margin:0;min-height:0}
+ body.screen-game:not(.chat-open) .chat-messages{padding:4px 6px}
+ body.screen-game:not(.chat-open) .chat-form{grid-column:1;grid-row:2;margin:0}
+ body.screen-game:not(.chat-open) .chat-message{margin-bottom:3px}
+ body.screen-game:not(.chat-open) .chat-message-meta{display:block}
+ body.screen-game:not(.chat-open) .chat-message-text{white-space:normal;overflow-wrap:anywhere}
+}
+@media(max-height:470px) and (max-width:700px){
+ body.screen-game .room-layout{min-height:510px}
+ body.screen-game .room-side{min-height:110px}
+}
+@media(min-width:701px) and (max-width:1000px){
+ body.screen-game .game-stage{grid-template-columns:minmax(120px,1fr) minmax(0,3fr) minmax(120px,1fr)}
+}
+@media(max-width:700px){
+ /* Use surplus portrait height for readable chat before enlarging the board. */
+ body.screen-game .room-side{height:clamp(112px,calc(100dvh - 100vw - 260px),210px)}
+}
+@media(min-width:701px) and (max-height:700px){
+ body.screen-game .game-players{grid-template-columns:repeat(4,minmax(0,1fr));gap:3px}
+ body.screen-game .game-player{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;padding:2px 1px;min-width:0}
+ body.screen-game .game-player .avatar{width:min(30px,100%);height:30px;font-size:17px}
+ body.screen-game .game-player-name{width:100%;text-align:center;font-size:8px;line-height:1.1}
+ body.screen-game .game-player-score{font-size:9px;line-height:1.1}
+ body.screen-game .game-player.is-drawer .game-player-role{left:auto;right:0;top:-4px}
+ body.screen-game .tools:not(.hidden){gap:6px}
+ body.screen-game .colors{grid-template-columns:repeat(3,26px);gap:5px}
+ body.screen-game .colors button{width:26px;height:26px}
+ body.screen-game .tool-actions{gap:4px}
+ body.screen-game .tool-button:not(.whistle),body.screen-game .brush-menu summary{min-height:27px;padding:5px}
+}
+@media(min-width:701px) and (max-height:550px){
+ body.screen-game{height:auto;min-height:100dvh;overflow:auto}
+ body.screen-game main{height:auto;min-height:calc(100dvh - 60px)}
+ body.screen-game .room{height:auto;min-height:calc(100dvh - 60px)}
+ body.screen-game .room-layout{min-height:480px}
+}
+/* The drawing player's name stays visible even when eight narrow chips fit on
+   a phone; the chat carries both conversation and answers. */
+body.screen-game .game-player.is-drawer{z-index:2}
+body.screen-game .game-player.is-drawer .game-player-role{display:block;position:absolute;left:0;right:auto;top:-11px;width:max-content;height:auto;max-width:220px;padding:2px 5px;border:1px solid #fff;border-radius:7px;background:#ffcc3f;color:#6e4808;font-size:9px;font-weight:900;line-height:1.2;white-space:nowrap;box-shadow:0 2px 4px #274e5a30}
+body.screen-game .game-player.is-drawer:nth-last-child(-n+2) .game-player-role{left:auto;right:0}
+body.screen-game .chat-message.is-correct .chat-message-text{background:#fff4bb;border-color:#f5d667;color:#815819;font-weight:900}
+@media(max-width:700px){body.screen-game .game-players{padding-top:13px}}
+body.screen-game .game-player.is-drawer .game-player-role{top:-14px;padding:3px 6px;font-size:10px}
+@media(max-width:700px){body.screen-game .game-players{padding-top:16px}}

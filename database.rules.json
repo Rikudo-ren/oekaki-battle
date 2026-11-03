@@ -36,7 +36,7 @@
       "$room": {
         "$game": {
           "$turn": {
-            ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('players').child(auth.uid).exists() && (root.child('rooms').child($room).child('drawer').val() == auth.uid || (root.child('claims').child($room).child($game).child($turn).child('ended').child('at').isNumber() && now >= root.child('claims').child($room).child($game).child($turn).child('ended').child('at').val() + 2000))",
+            ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists() && ((root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('drawer').val() == auth.uid) || (root.child('claims').child($room).child($game).child($turn).child('ended').child('at').isNumber() && now >= root.child('claims').child($room).child($game).child($turn).child('ended').child('at').val() + 2000))",
             ".write": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('host').val() == auth.uid && root.child('rooms').child($room).child('phase').val() == 'starting'",
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 30"
           },
@@ -111,7 +111,28 @@
           ".read": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
           "$message": {
             ".write": "auth != null && !data.exists() && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
-            ".validate": "newData.hasChildren(['uid', 'name', 'text', 'at']) && newData.child('uid').val() == auth.uid && newData.child('name').val() == root.child('rooms').child($room).child('players').child(auth.uid).child('name').val() && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 200 && newData.child('at').isNumber()"
+            ".validate": "newData.hasChildren(['uid', 'name', 'text', 'at']) && newData.child('uid').val() == auth.uid && newData.child('name').val() == root.child('rooms').child($room).child('players').child(auth.uid).child('name').val() && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 200 && newData.child('at').isNumber() && ((!newData.child('kind').exists() && !newData.child('turn').exists()) || (newData.child('kind').val() == 'correct' && newData.child('text').val() == '●●●' && newData.child('turn').isNumber() && newData.child('turn').val() == root.child('rooms').child($room).child('turn').val() && root.child('verified').child($room).child($game).child(newData.child('turn').val() + '').child(auth.uid).exists())) && (root.child('rooms').child($room).child('phase').val() != 'playing' || !root.child('secrets').child($room).child($game).child(root.child('rooms').child($room).child('turn').val() + '').exists() || (root.child('claims').child($room).child($game).child(root.child('rooms').child($room).child('turn').val() + '').child('ended').child('at').isNumber() && now >= root.child('claims').child($room).child($game).child(root.child('rooms').child($room).child('turn').val() + '').child('ended').child('at').val() + 2000) || newData.child('text').val() != root.child('secrets').child($room).child($game).child(root.child('rooms').child($room).child('turn').val() + '').val())",
+            "uid": {
+              ".validate": "newData.isString()"
+            },
+            "name": {
+              ".validate": "newData.isString()"
+            },
+            "text": {
+              ".validate": "newData.isString()"
+            },
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "kind": {
+              ".validate": "newData.val() == 'correct'"
+            },
+            "turn": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
           },
           ".write": "auth != null && !newData.exists() && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'closing' && root.child('rooms').child($room).child('cleanupBy').val() == auth.uid"
         }
@@ -140,6 +161,19 @@
               ".read": "auth != null && auth.uid == $uid && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('players').child(auth.uid).exists()",
               ".write": "auth != null && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('players').child(auth.uid).exists() && auth.uid == $uid && root.child('rooms').child($room).child('drawer').val() != auth.uid && !data.exists() && !root.child('claims').child($room).child($game).child($turn).child('ended').exists() && now >= root.child('rooms').child($room).child('turnStartedAt').val() + 3000 && (root.child('rooms').child($room).child('timeLimit').val() == 0 || now < root.child('rooms').child($room).child('turnStartedAt').val() + 3000 + root.child('rooms').child($room).child('timeLimit').val() * 1000)",
               ".validate": "newData.isString() && newData.val() == root.child('secrets').child($room).child($game).child($turn).val()"
+            }
+          }
+        }
+      }
+    },
+    "chatGuard": {
+      "$room": {
+        "$game": {
+          ".write": "auth != null && !newData.exists() && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'closing' && root.child('rooms').child($room).child('cleanupBy').val() == auth.uid",
+          "$turn": {
+            "$uid": {
+              ".write": "auth != null && auth.uid == $uid && root.child('rooms').child($room).child('gameId').val() == $game && root.child('rooms').child($room).child('phase').val() == 'playing' && root.child('rooms').child($room).child('turn').val() + '' == $turn && root.child('rooms').child($room).child('players').child(auth.uid).exists() && !root.child('claims').child($room).child($game).child($turn).child('ended').exists() && now >= root.child('rooms').child($room).child('turnStartedAt').val() + 3000 && (root.child('rooms').child($room).child('timeLimit').val() == 0 || now < root.child('rooms').child($room).child('turnStartedAt').val() + 3000 + root.child('rooms').child($room).child('timeLimit').val() * 1000)",
+              ".validate": "newData.val() == true"
             }
           }
         }
