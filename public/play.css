@@ -606,3 +606,18 @@ body.screen-game .answer-slot.filled.no-pop{animation:none}
 }
 @media(prefers-reduced-motion:reduce){body.screen-game .tool-button:not(:disabled),body.screen-game .brush-menu summary,body.screen-game .colors button,.quick-solo,.public-room-buttons button{transition:none}body.screen-game .tool-button:not(:disabled):hover,body.screen-game .brush-menu summary:hover,body.screen-game .colors button:hover,.quick-solo:hover,.public-room-buttons button:hover{transform:none}}
 @media(min-width:701px) and (max-height:700px){body.screen-game .game-players{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* The topic and its letter count sit immediately above the centered canvas. */
+body.screen-game .prompt-line{flex:none;order:0;justify-content:center;gap:8px;padding:0 0 4px}
+body.screen-game .prompt-line h2{color:#195d79;margin:0}
+body.screen-game .hint-state{color:#73500e}
+body.screen-game .game-stage.is-my-turn .prompt-line h2{color:#8f512b}
+@media(min-width:701px){
+ body.screen-game .game-status{grid-template-columns:minmax(0,1fr) auto}
+ body.screen-game .score-gauge{grid-column:1;grid-row:1}
+ body.screen-game .game-status-top{grid-column:2;grid-row:1}
+ body.screen-game .turn-role{grid-column:1 / -1;grid-row:2}
+ body.screen-game .game-stage{grid-template-rows:auto minmax(0,1fr);row-gap:4px}
+ body.screen-game .prompt-line{grid-column:2;grid-row:1;justify-content:center;gap:8px;padding:0}
+ body.screen-game .canvas-wrap{grid-column:2;grid-row:2}
+ body.screen-game .game-players,body.screen-game .tools:not(.hidden),body.screen-game .turn-guide:not(.hidden){grid-row:1 / 3}
+}

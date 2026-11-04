@@ -301,6 +301,7 @@ function maybeTransferHost(){
 }
 async function action(button, task){const entry=button.closest('#home'),buttons=entry?[...entry.querySelectorAll('#create,#join,#solo-start,[data-public-room]')]:[button];if(buttons.some(item=>item.disabled))return;buttons.forEach(item=>item.disabled=true);try{await task();}catch(e){toast(friendly(e));}finally{buttons.forEach(item=>item.disabled=false);}}
 function enterRoom(roomCode){
+  $('time-limit').value='30';
   code=roomCode; startPresence(roomCode);show('home',false);show('room',true);$('room-code').textContent=soloMode?'CPU対戦':(PUBLIC_ROOMS[code]||code);$('room-code-kicker').textContent=soloMode?'SOLO MODE':PUBLIC_ROOMS[code]?'PUBLIC ROOM':'ROOM CODE';$('room-code-icon').textContent=soloMode?'🤖':PUBLIC_ROOMS[code]?'🌐':'💌';show('copy',!soloMode&&!PUBLIC_ROOMS[code]);$('room-code-title').textContent=soloMode?'ひとりでCPU対戦':PUBLIC_ROOMS[code]?'だれでも入れる公開部屋':'部屋の合言葉';$('room-code-description').textContent=soloMode?'CPUと交互に描いて当てよう！':PUBLIC_ROOMS[code]?'誰でも途中から参加できます':'この合言葉を友だちに教えてね';
   if(unsubscribe) unsubscribe();
   unsubscribe=onValue(ref(db,`rooms/${code}`), snap=>{room=snap.val();if(!room){toast('部屋が終了しました。');goHome();return;}if(room.phase==='closing'){toast('部屋を終了しています。');goHome();return;}maybeTransferHost();if(subscribedGameId!==room.gameId){
@@ -350,7 +351,7 @@ $('solo-start').onclick=()=>action($('solo-start'),async()=>{
  const players={[user.uid]:{name,score:0}},online={};
  CPU_IDS.forEach((uid,i)=>{players[uid]={name:['もも','そら','まる'][i]+' CPU',score:0};online[uid]={local:true};});
  const roomCode='SOLO00';await set(ref(db,`rooms/${roomCode}`),{host:user.uid,phase:'lobby',gameId:randomId(20),players,online,createdAt:serverTimestamp(),lastOnline:serverTimestamp()});
- $('time-limit').value='60';$('hint-seconds').value='10';enterRoom(roomCode);
+ $('hint-seconds').value='10';enterRoom(roomCode);
 });
 document.querySelectorAll('[data-public-room]').forEach(button=>button.onclick=()=>action(button,async()=>{
  const name=$('quick-name').value.trim();if(!name)throw Error('なまえを入力してね。');await connect();const roomCode=button.dataset.publicRoom;await call('openPublicRoom',{name,code:roomCode});enterRoom(roomCode);void sweepKnownRooms();
@@ -406,11 +407,32 @@ function updateChatControls(){
  const playing=room.phase==='playing',claim=claims[room.turn],now=Date.now()+serverOffset,countdown=countdownRemaining(room,now);
  const waiting=room.phase==='starting'||playing&&(countdown===null || countdown>0 || (claim?.ended&&(claim.ended.reason==='pass'||resultScene(claim,now)==='end')) || (!claim?.ended&&room.timeLimit>0&&remainingMs(turnStart(room),room.timeLimit,now)===0));
  const input=$('chat-input'),button=$('chat-form').querySelector('button[type=submit]');
- input.disabled=!!waiting;button.disabled=!!waiting||chatSending;
+ const wasDisabled=input.disabled;input.disabled=!!waiting;button.disabled=!!waiting||chatSending;
+ // Desktop users can immediately type with an IME when a turn starts; do not
+ // summon a software keyboard or steal focus from any existing control.
+ if(wasDisabled&&!input.disabled&&playing&&document.body.classList.contains('screen-game')&&document.activeElement===document.body&&!document.querySelector('dialog[open]')&&window.matchMedia?.('(min-width: 701px) and (hover: hover) and (pointer: fine)').matches)input.focus({preventScroll:true});
  const answered=playing&&correctEntries(claim).some(entry=>entry.uid===user.uid),drawer=playing&&room.drawer===user.uid;
  input.placeholder=waiting?(claim?.ended?'結果発表を待ってね':'スタートを待ってね'):playing&&!claim?.ended&&!drawer?(answered?'正解済み・メッセージを入力':'答えはひらがなで入力'):'メッセージを入力';
  setText('chat-context',waiting?'まもなく再開':playing&&!claim?.ended?(drawer?'お題は送れません':answered?'正解済み・会話OK':'答えはひらがなで'):'メッセージを送れます');
 }
+// Typing anywhere on the play screen starts a chat message, without stealing
+// shortcuts, form controls, dialog input, or the native IME composition.
+document.addEventListener('keydown',e=>{
+ const input=$('chat-input'),target=e.target;
+ if(!room||!document.body.classList.contains('screen-game')||input.disabled||e.defaultPrevented||document.querySelector('dialog[open]'))return;
+ if(target?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;
+ if(e.metaKey||((e.ctrlKey||e.altKey)&&!e.getModifierState?.('AltGraph')))return;
+ if(e.key===' '&&target?.closest?.('button,summary,a[href]'))return;
+ const composition=e.isComposing||e.key==='Process'||e.key==='Dead'||e.keyCode===229;
+ if(!composition&&Array.from(e.key).length!==1)return;
+ input.focus({preventScroll:true});
+ if(composition)return; // The browser/IME inserts its own composed text.
+ e.preventDefault();
+ const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
+ if(input.value.length-(end-start)+e.key.length>input.maxLength)return;
+ input.setRangeText(e.key,start,end,'end');
+ input.dispatchEvent(new Event('input',{bubbles:true}));
+});
 $('chat-form').onsubmit=e=>{e.preventDefault();if(chatSending)return;chatSending=true;action(e.submitter || e.currentTarget.querySelector('button[type=submit]'),async()=>{
  const input=$('chat-input'),text=input.value.trim();if(!text)return;
  if(!room?.players?.[user.uid])throw Error('部屋に参加していません。');
