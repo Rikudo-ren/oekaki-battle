@@ -154,3 +154,20 @@ test('Realtime Database: 公開部屋だけは終了画面から新規参加で�
   await assertFails(guest.ref('rooms/OPEN01/players/other').set({name:'other',score:0}));
  }finally{await env.cleanup();}
 });
+
+test('Realtime Database: GMは参加者が接続中でも退出時に部屋を解散できる',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-host-exit',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  const roots=['secrets','claims','drawings','chats','hints','verified','chatGuard','passCandidates'];
+  await env.withSecurityRulesDisabled(async c=>{
+   const db=c.database();await db.ref('rooms/EXIT01').set({host:'host',phase:'playing',gameId:'game',players:{host:{name:'host',score:0},guest:{name:'guest',score:0}},online:{host:{tab:true},guest:{tab:true}}});
+   for(const root of roots)await db.ref(`${root}/EXIT01/game/example`).set(true);
+  });
+  const host=env.authenticatedContext('host').database(),guest=env.authenticatedContext('guest').database(),late=env.authenticatedContext('late').database();
+  await assertFails(guest.ref('rooms/EXIT01').update({phase:'closing',cleanupBy:'guest',closingAt:timestamp}));
+  await assertSucceeds(host.ref('rooms/EXIT01').transaction(current=>({...current,phase:'closing',cleanupBy:'host',closingAt:timestamp}),undefined,false));
+  await assertFails(late.ref('rooms/EXIT01/players/late').set({name:'late',score:0}));
+  for(const root of roots){await assertFails(guest.ref(`${root}/EXIT01/game`).set(null));await assertSucceeds(host.ref(`${root}/EXIT01/game`).set(null));}
+  await assertSucceeds(host.ref('rooms/EXIT01').set(null));
+ }finally{await env.cleanup();}
+});
