@@ -11,7 +11,7 @@ import { createHint, hintCharacters } from './hints.mjs';
 import { unlockAudio, playSound, playWhistle, soundEnabled, setSoundEnabled, musicEnabled, setMusicEnabled, setMusicScene } from './audio.mjs';
 import { isOnline, onlinePlayers, isAbandoned, canSkipAbsentDrawer } from './room-management.mjs';
 import { turnStart, countdownRemaining, resultReady, correctEntries, nextSlot, extendSchedule } from './rounds.mjs';
-import { END_SCENE_MS, ANSWER_SCENE_MS, RESULT_SCENE_MS, GO_SCENE_MS, resultScene, finalSceneVisible } from './presentation.mjs';
+import { END_SCENE_MS, ANSWER_SCENE_MS, RESULT_SCENE_MS, SCORE_SCENE_MS, SCORE_BONUS_MS, SCORE_MOVE_MS, SCORE_SETTLED_MS, GO_SCENE_MS, resultScene, finalSceneVisible, scoreStage, animatedScore } from './presentation.mjs';
 
 const $ = id => document.getElementById(id);
 let app, auth, db, user, code, room, claims={}, unsubscribe, unsubscribeClaims, unsubscribeDrawing, unsubscribeChat, activeTurn, wordKey, drawerWord='', color='#393632', drawing=false, points=[], strokes=[], pendingDraws=0, drawQueue=Promise.resolve(), serverOffset=0, timeoutPending='', timeoutWord='', timeoutWordKey='', timerHandle=null, hintKey='', hintValue=null, hintPending='', hintRetryAt=0, soundTurnKey='', soundResultKey='', soundHadRoomState=false;
@@ -20,6 +20,7 @@ let countdownKey='', countdownValue=0, revealKey='', revealRetryAt=0, soundAnswe
 let chatMessages={}, chatRevealedWords={}, chatWordPending={}, chatSending=false, chatGuardKey='';
 let passAdvancePending='', passRetryAt=0, lastRenderedPhase='', subscribedGameId='', scoreboardKey='', hintNoticeKey='', hintNoticeTimer=null;
 let presentationKey='', endSceneKey='', answerSceneKey='', finalSceneKey='', correctNoticeTimer=null, soundFinalKey='';
+let scoreboardAnimation=null, scoreboardFrame=null;
 const PUBLIC_ROOMS={'OPEN01':'わいわい部屋','OPEN02':'のんびり部屋','OPEN03':'おえかき部屋'};
 const CPU_IDS=['cpu-1','cpu-2','cpu-3'];
 let soloMode=false, savedUser=null, savedDb=null, botTurnKey='', botPlan=[], botDrawn=0, botWord='', botLoading=false, botWriting=false;
@@ -308,7 +309,7 @@ function enterRoom(roomCode){
   if(timerHandle)clearInterval(timerHandle);timerHandle=setInterval(()=>{updateTimer();maybeTransferHost();maybeSkipAbsentDrawer();maybePruneLobby();maybeAdvancePass();maybeRunSoloBots();},250);
   window.scrollTo(0,0);
 }
-function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);show('room',false);show('home',true);}
+function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);show('room',false);show('home',true);}
 function refreshSoundButton(){const on=soundEnabled(),button=$('sound-toggle');button.setAttribute('aria-pressed',String(on));button.setAttribute('aria-label',on?'効果音をオフにする':'効果音をオンにする');button.querySelector('span').textContent=on?'効果音 ON':'効果音 OFF';}
 $('sound-toggle').onclick=()=>{setSoundEnabled(!soundEnabled());refreshSoundButton();if(soundEnabled())playSound('turn');};
 document.addEventListener('pointerdown',unlockAudio,{passive:true});document.addEventListener('keydown',unlockAudio);
@@ -494,7 +495,7 @@ function render(){
  $('players').replaceChildren(...players.map(([id,p],i)=>{const div=document.createElement('div');div.className='player';const avatar=document.createElement('span');avatar.className=`avatar avatar-${i%4}`;avatar.textContent=['☺','✿','★','☻'][i%4];const name=document.createElement('div');name.className='player-name';name.textContent=p.name+(id===user.uid?'（あなた）':'');const meta=document.createElement('small');meta.textContent=!isOnline(room,id)?'離席中':id===room.host?'HOST':(!lobby&&id===room.drawer?'おえかき中':'');name.appendChild(meta);const score=document.createElement('b');score.textContent=lobby?(p.score?`${p.score} pt`:''):`${p.score||0} pt`;div.append(avatar,name,score);return div;}));
  $('game-players').replaceChildren(...players.map(([id,p],i)=>{const isDrawing=room.phase==='playing'&&id===room.drawer;const chip=document.createElement('div');chip.className='game-player'+(isDrawing?' is-drawer':'')+(!isOnline(room,id)?' is-offline':'');chip.setAttribute('aria-label',`${p.name}、${isDrawing?'おえかき中、':''}${p.score||0}ポイント${!isOnline(room,id)?'、離席中':''}`);const avatar=document.createElement('span');avatar.className=`avatar avatar-${i%4}`;avatar.textContent=['☺','✿','★','☻'][i%4];const name=document.createElement('span');name.className='game-player-name';name.textContent=p.name+(id===user.uid?'（自分）':'')+(!isOnline(room,id)?'（離席中）':'');name.title=name.textContent;const score=document.createElement('span');score.className='game-player-score';score.textContent=`${p.score||0} pt`;chip.append(avatar,name,score);if(isDrawing){const role=document.createElement('span');role.className='game-player-role';role.textContent=`✎ ${p.name}がおえかき中`;chip.append(role);}return chip;}));
  updateChatControls();renderChat(chatMessages);
- if(lobby){show('scoreboard',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);scoreboardKey='';return;}
+ if(lobby){show('scoreboard',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);stopScoreboardAnimation();scoreboardKey='';return;}
  const total=extendSchedule(room.schedule,room.players,room.rounds+(room.extraRounds||0)).length;
  $('turn-label').textContent=finished?'GAME COMPLETE':`${(room.scheduleIndex??room.turn)+1} / ${total} ターン`;
  $('turn-badge').textContent=finished?'🏆':drawer?'🎨':'💡';
@@ -535,25 +536,70 @@ function render(){
 
 // Animate from the previous ranking to the new one. The revealed claim, not
 // local UI state, is the source of truth on every client and after reconnect.
-function renderScoreboard(claim, revealed){
+// Drive the counter from the shared end timestamp, never from local animation
+// start. This keeps reconnects, tab suspensions and joins in the same moment.
+function stopScoreboardAnimation(){
+ if(scoreboardFrame!==null){cancelAnimationFrame(scoreboardFrame);scoreboardFrame=null;}
+ scoreboardAnimation=null;
+}
+function animateScoreboard(){
+ const state=scoreboardAnimation;
+ if(!state||!room||$('scoreboard').classList.contains('hidden')){stopScoreboardAnimation();return;}
+ const age=Math.max(0,Date.now()+serverOffset-state.startedAt), reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
+ const stage=scoreStage(age),board=$('scoreboard');
+ if(state.stage!==stage){
+  state.stage=stage;board.dataset.stage=stage;
+  $('scoreboard-phase').textContent=({ready:'ポイントを集計中…',bonus:'今回の獲得ポイント！',count:'合計ポイントに加算！',move:'順位が変わる…！',settled:'現在の順位はこちら！'})[stage];
+  for(const step of board.querySelectorAll('[data-step]')){
+   const order=['bonus','count','move'],current=stage==='settled'?'move':stage;
+   step.classList.toggle('is-active',step.dataset.step===current);
+   step.classList.toggle('is-done',order.indexOf(step.dataset.step)<order.indexOf(current));
+  }
+ }
+ for(const entry of state.entries){
+  const value=animatedScore(entry.before,entry.after,age,reduced);
+  if(entry.lastValue!==value){entry.number.textContent=value.toLocaleString('ja-JP');entry.lastValue=value;}
+  entry.row.classList.toggle('is-leader',reduced||age>=SCORE_SETTLED_MS?entry.rank===1:entry.previousRank===1);
+ }
+ // Only play transitions actually witnessed. Reconnects/background tabs never
+ // replay missed sounds, and both sounds respect the existing mute control.
+ if(state.lastAge!==null&&!document.hidden&&age-state.lastAge<500){
+  if(state.hasGain&&state.lastAge<SCORE_BONUS_MS&&age>=SCORE_BONUS_MS)playSound('correct');
+  if(state.hasMove&&state.lastAge<SCORE_MOVE_MS&&age>=SCORE_MOVE_MS)playSound('go');
+ }
+ state.lastAge=age;
+ if(age<SCORE_SCENE_MS)scoreboardFrame=requestAnimationFrame(animateScoreboard);
+ else scoreboardFrame=null;
+}
+function renderScoreboard(claim, visible){
  const now=Date.now()+serverOffset, key=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;
- const visible=revealed;
  show('scoreboard',visible);
- if(!visible){scoreboardKey='';return;}
+ if(!visible){stopScoreboardAnimation();scoreboardKey='';return;}
  const word=timeoutWordKey===key?timeoutWord:'';
  $('scoreboard-answer').textContent=word?`答えは「${word}」！`:'答えを確認中…';
- if(scoreboardKey===key)return;
- scoreboardKey=key;$('scoreboard').style.setProperty('--scene-offset',`${-Math.max(0,now-claim.ended.at-END_SCENE_MS-ANSWER_SCENE_MS)}ms`);
  const before=scoresForRoom(room,claims,now,room.turn), after=scoresForRoom(room,claims,now), oldOrder=ranking(room,before), newOrder=ranking(room,after), gains=scoreDeltas(room,room.turn,claim);
+ // A late join changes the rows. Rebuild at the current time without replaying
+ // the show; rank and totals always come from the actual score calculation.
+ const signature=JSON.stringify([key,claim.ended.at,newOrder.map(x=>[x.uid,x.rank,x.score,before[x.uid],gains[x.uid]||0,room.players[x.uid]?.name]),oldOrder.map(x=>[x.uid,x.rank])]);
+ if(scoreboardKey===signature)return;
+ const wasAnimating=!!scoreboardAnimation;stopScoreboardAnimation();scoreboardKey=signature;
+ const start=claim.ended.at+END_SCENE_MS+ANSWER_SCENE_MS;
+ if(!wasAnimating)$('scoreboard').style.setProperty('--scene-offset',`${-Math.max(0,now-start)}ms`);
+ const entries=[];
  const nodes=newOrder.map((item,index)=>{
-  const row=document.createElement('div');row.className='scoreboard-row';row.style.setProperty('--move',oldOrder.findIndex(x=>x.uid===item.uid)-index);
-  const rank=document.createElement('b');rank.className='scoreboard-rank';const previousRank=oldOrder.find(x=>x.uid===item.uid)?.rank;const oldRank=document.createElement('span');oldRank.className='rank-before';oldRank.textContent=`${previousRank}位`;const newRank=document.createElement('span');newRank.className='rank-after';newRank.textContent=`${item.rank}位`;rank.append(oldRank,newRank);
-  const name=document.createElement('span');name.className='scoreboard-name';name.textContent=room.players[item.uid]?.name||'だれか';
-  const gain=document.createElement('span');gain.className='scoreboard-gain';gain.textContent=gains[item.uid]?`+${gains[item.uid]}`:'±0';
-  const points=document.createElement('span');points.className='scoreboard-points';points.textContent=`${before[item.uid]} → ${item.score} pt`;
-  row.append(rank,name,gain,points);return row;
+  const oldIndex=oldOrder.findIndex(x=>x.uid===item.uid),previousRank=oldOrder[oldIndex]?.rank,oldScore=before[item.uid]||0,delta=gains[item.uid]||0;
+  const row=document.createElement('div');row.className='scoreboard-row'+(delta?' has-gain':' no-gain')+(oldIndex!==index?' has-move':'')+(oldIndex>index?' moves-up':'');row.style.setProperty('--move',oldIndex-index);row.style.setProperty('--scene-offset',`${-Math.max(0,now-start)}ms`);
+  const playerName=room.players[item.uid]?.name||'だれか';row.setAttribute('aria-label',`${playerName}、${oldScore}点から${item.score}点、${item.rank}位`);
+  const rank=document.createElement('b');rank.className='scoreboard-rank';rank.setAttribute('aria-hidden','true');const oldRank=document.createElement('span');oldRank.className='rank-before';oldRank.textContent=`${previousRank}位`;const newRank=document.createElement('span');newRank.className='rank-after';newRank.textContent=`${item.rank}位`;rank.append(oldRank,newRank);
+  const name=document.createElement('span');name.className='scoreboard-name';name.textContent=playerName;name.title=playerName;
+  const change=document.createElement('span');change.className='rank-change '+(previousRank>item.rank?'rank-up':previousRank<item.rank?'rank-down':'rank-same');change.textContent=previousRank>item.rank?`▲${previousRank-item.rank}`:previousRank<item.rank?`▼${item.rank-previousRank}`:'−';change.setAttribute('aria-hidden','true');
+  const gain=document.createElement('span');gain.className='scoreboard-gain';gain.textContent=delta?`${delta>0?'+':''}${delta}`:'±0';gain.setAttribute('aria-hidden','true');
+  const points=document.createElement('span');points.className='scoreboard-points';points.setAttribute('aria-hidden','true');const number=document.createElement('strong');number.className='scoreboard-number';points.append(number,document.createTextNode(' pt'));
+  row.append(rank,name,change,gain,points);entries.push({row,number,before:oldScore,after:item.score,rank:item.rank,previousRank,lastValue:null});return row;
  });
  $('scoreboard-list').replaceChildren(...nodes);
+ scoreboardAnimation={startedAt:start,entries,lastAge:null,stage:'',hasGain:entries.some(e=>e.before!==e.after),hasMove:entries.some(e=>e.rank!==e.previousRank)};
+ animateScoreboard();
 }
 function updateScoreGauge(start,duration,left){
  if(room.scoreMode!=='thirds'){show('score-gauge',false);return;}
