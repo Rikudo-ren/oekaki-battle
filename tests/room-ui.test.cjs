@@ -29,7 +29,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 // Tabs, settings and chat are accessible without scrolling the main game view.
 {
  const c=makeClient('host');c.d.querySelector('#tab-join').click();assert.equal(c.d.body.classList.contains('join-mode'),true);assert.equal(c.d.querySelector('#tab-join').getAttribute('aria-selected'),'true');c.d.querySelector('#tab-create').click();assert.equal(c.d.body.classList.contains('join-mode'),false);
- c.d.querySelector('#create-name').value='ホスト';c.d.querySelector('#create').click();await wait();assert.ok(c.d.body.classList.contains('screen-lobby'));
+ c.d.querySelector('#create-name').value='ホスト';c.d.querySelector('#create').click();await wait();assert.ok(c.d.body.classList.contains('screen-lobby'));assert.equal(c.d.querySelector('#time-limit').value,'30');
  const colors=[...c.d.querySelectorAll('#colors button')];assert.equal(colors[0].getAttribute('aria-pressed'),'true');colors[1].click();assert.equal(colors[0].getAttribute('aria-pressed'),'false');assert.equal(colors[1].getAttribute('aria-pressed'),'true');colors[0].click();
  c.d.querySelector('#settings-open').click();assert.equal(c.d.querySelector('#settings-dialog').hasAttribute('open'),true);c.d.querySelector('#settings-close').click();assert.equal(c.d.querySelector('#settings-dialog').hasAttribute('open'),false);
  c.d.querySelector('#chat-expand').click();assert.ok(c.d.body.classList.contains('chat-open'));assert.equal(c.d.querySelector('#chat-expand').getAttribute('aria-expanded'),'true');c.d.querySelector('#chat-backdrop').click();assert.equal(c.d.body.classList.contains('chat-open'),false);
@@ -50,7 +50,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 // guesses. CPU answers are simulated without any Firebase writes.
 {
  const c=makeClient('human');Object.defineProperty(c.w.crypto,'getRandomValues',{value:array=>{array.fill(0);return array;}});c.d.querySelector('#quick-name').value='ひとり';c.d.querySelector('#solo-start').click();await wait(250);
- assert.match(c.d.querySelector('#room-code-title').textContent,/CPU対戦/);assert.match(c.d.querySelector('#players').textContent,/もも CPU/);assert.deepEqual(data,{});
+ assert.equal(c.d.querySelector('#time-limit').value,'30');assert.match(c.d.querySelector('#room-code-title').textContent,/CPU対戦/);assert.match(c.d.querySelector('#players').textContent,/もも CPU/);assert.deepEqual(data,{});
  c.d.querySelector('#time-limit').value='custom';c.d.querySelector('#custom-time').value='10';c.d.querySelector('#time-limit').dispatchEvent(new c.w.Event('change'));c.d.querySelector('#start').click();await wait(3500);
  assert.match(c.d.querySelector('.game-player.is-drawer').textContent,/CPU/);assert.ok(c.painted.length>0);await sendChat(c,'まちがい');assert.doesNotMatch(c.d.querySelector('#chat-messages').textContent,/正解！/);
  await wait(2500);assert.match(c.d.querySelector('#answer-slots').textContent,/正解 [1-2] \/ 3/);await sendChat(c,'いぬ');await wait(4500);assert.match(c.d.querySelector('#result').textContent,/答えは「いぬ」/);await wait(3000);assert.match(c.d.querySelector('#scoreboard-list').textContent,/ひとり/);assert.deepEqual(data,{});
@@ -86,7 +86,26 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 }
 // The host skips an absent drawer after the grace period, including no-limit games.
 {
- const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);assert.equal(getPath(`rooms/${code}/phase`),'playing');write(`rooms/${code}/drawer`,'guest');notify([`rooms/${code}/drawer`]);disconnect(guest);write(`rooms/${code}/lastDisconnects/guest`,Date.now()-31000);notify([`rooms/${code}/lastDisconnects/guest`]);await wait(450);assert.equal(getPath(`claims/${code}/${game}/0`).ended.reason,'skip');assert.match(host.d.querySelector('#result').textContent,/終了/);write(`claims/${code}/${game}/0/ended/at`,Date.now()-3300);notify([`claims/${code}/${game}/0/ended/at`]);await wait(350);assert.match(host.d.querySelector('#result').textContent,/答えは/);host.d.querySelector('#leave').click();await wait();assert.equal(getPath(`rooms/${code}`),undefined);host.dom.window.close();data={};subs=[];
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#time-limit').value='0';host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);assert.equal(getPath(`rooms/${code}/phase`),'playing');write(`rooms/${code}/drawer`,'guest');notify([`rooms/${code}/drawer`]);disconnect(guest);write(`rooms/${code}/lastDisconnects/guest`,Date.now()-31000);notify([`rooms/${code}/lastDisconnects/guest`]);await wait(450);assert.equal(getPath(`claims/${code}/${game}/0`).ended.reason,'skip');assert.match(host.d.querySelector('#result').textContent,/終了/);write(`claims/${code}/${game}/0/ended/at`,Date.now()-3300);notify([`claims/${code}/${game}/0/ended/at`]);await wait(350);assert.match(host.d.querySelector('#result').textContent,/答えは/);host.d.querySelector('#leave').click();await wait();assert.equal(getPath(`rooms/${code}`),undefined);host.dom.window.close();data={};subs=[];
+}
+// The new default is used in a real start, and typing outside controls goes
+// to chat without consuming shortcuts, dialogs or IME composition events.
+{
+ const {host,guest,code}=await roomWithTwo();assert.equal(host.d.querySelector('#time-limit').value,'30');host.d.querySelector('#start').click();await wait();assert.equal(getPath(`rooms/${code}/timeLimit`),30);
+ const input=guest.d.querySelector('#chat-input'),canvas=guest.d.querySelector('#canvas');
+ const key=(target,k,extra={})=>{const event=new guest.w.KeyboardEvent('keydown',{key:k,bubbles:true,cancelable:true,...extra});target.dispatchEvent(event);return event;};
+ assert.ok(input.disabled);key(guest.d.body,'a');assert.equal(input.value,'');
+ write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait(350);assert.equal(input.disabled,false);
+ assert.ok(guest.d.querySelector('#game-stage').contains(guest.d.querySelector('#word-count')));assert.ok(guest.d.querySelector('#game-stage').contains(guest.d.querySelector('#word-tiles')));
+ const first=key(canvas,'a');assert.equal(first.defaultPrevented,true);assert.equal(input.value,'a');assert.equal(guest.d.activeElement,input);
+ input.blur();key(guest.d.body,'い');assert.equal(input.value,'aい');input.blur();
+ key(guest.d.body,'v',{ctrlKey:true});assert.equal(guest.d.activeElement,guest.d.body);assert.equal(input.value,'aい');
+ const button=guest.d.querySelector('#chat-expand');button.focus();const space=key(button,' ');assert.equal(space.defaultPrevented,false);assert.equal(guest.d.activeElement,button);
+ const range=guest.d.querySelector('#brush-size');range.focus();key(range,'9');assert.equal(guest.d.activeElement,range);assert.equal(input.value,'aい');
+ guest.d.querySelector('#gm-dialog').setAttribute('open','');key(guest.d.body,'x');assert.equal(input.value,'aい');guest.d.querySelector('#gm-dialog').removeAttribute('open');
+ const ime=key(guest.d.body,'Process',{isComposing:true,keyCode:229});assert.equal(ime.defaultPrevented,false);assert.equal(guest.d.activeElement,input);assert.equal(input.value,'aい');
+ input.value='x'.repeat(200);input.blur();key(guest.d.body,'b');assert.equal(input.value.length,200);
+ host.dom.window.close();guest.dom.window.close();data={};subs=[];
 }
 // Timed gauge, word length and hint are visible to both roles and use the
 // same bands as scoring. A hint is announced only to answerers.
@@ -102,7 +121,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 }
 // No timer means no three-band gauge.
 {
- const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait(300);assert.equal(host.d.querySelector('#score-gauge').classList.contains('hidden'),true);assert.match(host.d.querySelector('#word-count').textContent,/文字/);host.dom.window.close();guest.dom.window.close();data={};subs=[];
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#time-limit').value='0';host.d.querySelector('#start').click();await wait(300);assert.equal(host.d.querySelector('#score-gauge').classList.contains('hidden'),true);assert.match(host.d.querySelector('#word-count').textContent,/文字/);host.dom.window.close();guest.dom.window.close();data={};subs=[];
 }
 // Two answer slots: the first answer does not reveal or end the turn.
 {
@@ -172,7 +191,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 }
 // GM can return the match to the lobby with confirmed scores, then restart cleanly.
 {
- const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#time-limit').value='0';host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
  write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait();await sendChat(guest,getPath(`secrets/${code}/${game}/0`));await wait(2200);
  guest.d.querySelector('#gm-open').click();assert.equal(guest.d.querySelector('#gm-dialog').hasAttribute('open'),false);
  host.d.querySelector('#gm-open').click();assert.equal(host.d.querySelector('#gm-dialog').hasAttribute('open'),true);host.d.querySelector('#force-end').click();await wait();
@@ -183,7 +202,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 }
 // Play a full two-person lap through the normal result screens, then replay.
 {
- const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#time-limit').value='0';host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
  write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/order`,['host','guest']);write(`rooms/${code}/schedule`,['host','guest']);write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait();
  await sendChat(guest,getPath(`secrets/${code}/${game}/0`));write(`claims/${code}/${game}/0/ended/at`,Date.now()-13000);notify([`claims/${code}/${game}/0`]);await wait(400);host.d.querySelector('#next').click();await wait();
  assert.equal(getPath(`rooms/${code}/turn`),1);write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}/turnStartedAt`]);await wait(250);await sendChat(host,getPath(`secrets/${code}/${game}/1`));write(`claims/${code}/${game}/1/ended/at`,Date.now()-13000);notify([`claims/${code}/${game}/1`]);await wait(400);host.d.querySelector('#next').click();await wait();
@@ -232,14 +251,14 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 }
 // The host can end a no-limit turn with the whistle, without a correct answer.
 {
- const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#time-limit').value='0';host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
  write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}/turnStartedAt`]);await wait();host.d.querySelector('#whistle').click();await wait();
  assert.equal(getPath(`claims/${code}/${game}/0`).ended.reason,'whistle');assert.match(guest.d.querySelector('#result').textContent,/終了/);
  host.dom.window.close();guest.dom.window.close();data={};subs=[];
 }
 // A returning participant keeps their score; a newcomer can play and will draw.
 {
- const {host,guest,code}=await roomWithTwo();host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
+ const {host,guest,code}=await roomWithTwo();host.d.querySelector('#time-limit').value='0';host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);
  write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/order`,['host','guest']);write(`rooms/${code}/schedule`,['host','guest']);write(`rooms/${code}/turnStartedAt`,Date.now()-4000);notify([`rooms/${code}`]);await wait();
  await sendChat(guest,getPath(`secrets/${code}/${game}/0`));await wait(2200);
  disconnect(guest);const returning=makeClient('guest');returning.d.querySelector('#join-name').value='別の入力名';returning.d.querySelector('#join-code').value=code;returning.d.querySelector('#join').click();await wait(180);
