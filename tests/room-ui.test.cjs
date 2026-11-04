@@ -33,7 +33,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
  const colors=[...c.d.querySelectorAll('#colors button')];assert.equal(colors[0].getAttribute('aria-pressed'),'true');colors[1].click();assert.equal(colors[0].getAttribute('aria-pressed'),'false');assert.equal(colors[1].getAttribute('aria-pressed'),'true');colors[0].click();
  c.d.querySelector('#settings-open').click();assert.equal(c.d.querySelector('#settings-dialog').hasAttribute('open'),true);c.d.querySelector('#settings-close').click();assert.equal(c.d.querySelector('#settings-dialog').hasAttribute('open'),false);
  c.d.querySelector('#chat-expand').click();assert.ok(c.d.body.classList.contains('chat-open'));assert.equal(c.d.querySelector('#chat-expand').getAttribute('aria-expanded'),'true');c.d.querySelector('#chat-backdrop').click();assert.equal(c.d.body.classList.contains('chat-open'),false);
- c.d.querySelector('#music-toggle').click();assert.equal(c.d.querySelector('#music-toggle').getAttribute('aria-pressed'),'false');
+ assert.equal(c.d.querySelector('#music-toggle').getAttribute('aria-pressed'),'false');assert.equal(c.d.querySelector('#sound-toggle').getAttribute('aria-pressed'),'false');c.d.querySelector('#music-toggle').click();assert.equal(c.d.querySelector('#music-toggle').getAttribute('aria-pressed'),'true');c.d.querySelector('#music-toggle').click();assert.equal(c.d.querySelector('#music-toggle').getAttribute('aria-pressed'),'false');
  c.d.querySelector('#leave').click();await wait();assert.equal(c.d.body.classList.contains('screen-lobby'),false);c.dom.window.close();data={};subs=[];
 }
 // Public room entrances are shared, reusable after everyone leaves, and let
@@ -43,7 +43,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
  host.d.querySelector('[data-public-room="OPEN01"]').click();guest.d.querySelector('[data-public-room="OPEN01"]').click();await wait(200);
  assert.ok(getPath('rooms/OPEN01/players/host'));assert.ok(getPath('rooms/OPEN01/players/guest'));assert.match(host.d.querySelector('#room-code-title').textContent,/公開部屋/);
  write('rooms/OPEN01/phase','finished');notify(['rooms/OPEN01']);await wait();const late=makeClient('late');late.d.querySelector('#quick-name').value='新しい人';late.d.querySelector('[data-public-room="OPEN01"]').click();await wait();assert.ok(getPath('rooms/OPEN01/players/late'));
- host.d.querySelector('#leave').click();await wait();guest.d.querySelector('#leave').click();await wait();late.d.querySelector('#leave').click();await wait();assert.equal(getPath('rooms/OPEN01'),undefined);
+ host.d.querySelector('#leave').click();await wait();assert.equal(getPath('rooms/OPEN01'),undefined);for(const c of [guest,late]){assert.equal(c.d.querySelector('#home').classList.contains('hidden'),false);assert.match(c.d.querySelector('#toast').textContent,/GMが退出/);}
  host.d.querySelector('[data-public-room="OPEN01"]').click();await wait();assert.ok(getPath('rooms/OPEN01/players/host'));host.dom.window.close();guest.dom.window.close();late.dom.window.close();data={};subs=[];
 }
 // Single-player uses local data, draws a prepared topic and rejects wrong
@@ -72,13 +72,22 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
  c.d.querySelector('#again').click();await wait(200);assert.match(c.d.querySelector('#turn-label').textContent,/5 \/ 8/);assert.match(c.d.querySelector('.game-player.is-drawer').textContent,/CPU/);
  elapsed+=4000;await wait(900);assert.equal(c.d.querySelector('#canvas-placeholder').classList.contains('hidden'),true);assert.deepEqual(data,{});c.dom.window.close();data={};subs=[];
 }
-// Voluntary host exit hands off; the last person removes all game resources.
-{
- const {host,guest,code}=await roomWithTwo();const room=getPath(`rooms/${code}`),game=room.gameId;
+// The GM's explicit exit closes the room even while other participants (or
+// another GM tab) are online. Cancel leaves the room unchanged.
+for(const phase of ['lobby','playing','finished']){
+ const {host,guest,code}=await roomWithTwo();const game=getPath(`rooms/${code}/gameId`);
+ if(phase!=='lobby'){host.d.querySelector('#start').click();await wait();if(phase==='finished'){write(`rooms/${code}/phase`,'finished');notify([`rooms/${code}`]);await wait();}}
  for(const root of ['secrets','claims','drawings','chats','hints','verified','chatGuard','passCandidates'])write(`${root}/${code}/${game}/dummy`,{x:1});
- host.d.querySelector('#leave').click();await wait();assert.equal(getPath(`rooms/${code}/host`),'guest');assert.ok(getPath(`rooms/${code}/players/guest`));assert.equal(getPath(`rooms/${code}/players/host`),undefined);
- guest.d.querySelector('#leave').click();await wait();assert.equal(getPath(`rooms/${code}`),undefined);for(const root of ['secrets','claims','drawings','chats','hints','verified','chatGuard','passCandidates'])assert.equal(getPath(`${root}/${code}/${game}`),undefined,root);
+ write(`rooms/${code}/online/host/other-tab`,true);notify([`rooms/${code}/online/host/other-tab`]);await wait();
+ let prompt='';host.w.confirm=message=>{prompt=message;return false;};host.d.querySelector('#leave').click();await wait();assert.match(prompt,/GM.*部屋が解散/);assert.equal(getPath(`rooms/${code}/phase`),phase);assert.ok(getPath(`rooms/${code}/players/guest`));
+ host.w.confirm=()=>true;host.d.querySelector('#leave').click();await wait(200);assert.equal(getPath(`rooms/${code}`),undefined);for(const root of ['secrets','claims','drawings','chats','hints','verified','chatGuard','passCandidates'])assert.equal(getPath(`${root}/${code}/${game}`),undefined,root);
+ assert.equal(guest.d.querySelector('#home').classList.contains('hidden'),false);assert.match(guest.d.querySelector('#toast').textContent,/GMが退出/);assert.equal(host.d.querySelector('#home').classList.contains('hidden'),false);
  host.dom.window.close();guest.dom.window.close();data={};subs=[];
+}
+// A non-GM leaving does not dissolve the room.
+{
+ const {host,guest,code}=await roomWithTwo();guest.d.querySelector('#leave').click();await wait();assert.equal(getPath(`rooms/${code}/host`),'host');assert.ok(getPath(`rooms/${code}/players/host`));assert.equal(getPath(`rooms/${code}/players/guest`),undefined);
+ host.d.querySelector('#leave').click();await wait();assert.equal(getPath(`rooms/${code}`),undefined);host.dom.window.close();guest.dom.window.close();data={};subs=[];
 }
 // Unexpected host disconnect triggers election and leaves guest in the room.
 {
@@ -126,6 +135,7 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
 // Two answer slots: the first answer does not reveal or end the turn.
 {
  const {host,guest,code}=await roomWithTwo();const third=makeClient('third');third.d.querySelector('#join-name').value='さんにんめ';third.d.querySelector('#join-code').value=code;third.d.querySelector('#join').click();await wait();
+ for(const client of [host,guest,third])client.d.querySelector('#sound-toggle').click();
  host.d.querySelector('#time-limit').value='60';host.d.querySelector('#max-correct').value='2';host.d.querySelector('#start').click();await wait();const game=getPath(`rooms/${code}/gameId`);write(`rooms/${code}/drawer`,'host');write(`rooms/${code}/schedule`,['host','guest','third']);write(`rooms/${code}/turnStartedAt`,Date.now()-3001);notify([`rooms/${code}`]);await wait();
  const word=getPath(`secrets/${code}/${game}/0`);
  assert.match(host.d.querySelector('.is-drawer .game-player-role').textContent,/あなたが描く番/);assert.match(guest.d.querySelector('.is-drawer .game-player-role').textContent,/ホストがおえかき中/);assert.match(host.d.querySelector('#turn-role-title').textContent,/あなたが描く番/);assert.match(host.d.querySelector('#compact-role').textContent,/あなたが描く/);assert.match(host.d.querySelector('#canvas-placeholder').textContent,/絵を描こう/);assert.match(guest.d.querySelector('#turn-role-title').textContent,/あなたは答える番/);assert.match(guest.d.querySelector('#compact-role').textContent,/答える番/);assert.equal(host.d.querySelector('#game-stage').classList.contains('is-my-turn'),true);assert.equal(guest.d.querySelector('#game-stage').classList.contains('is-my-turn'),false);assert.match(guest.d.querySelector('#guide-description').textContent,/ひらがな/);

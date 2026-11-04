@@ -7,16 +7,13 @@ const sources = {
   correct: '/sounds/notification-success-sparkle.wav',
   timeout: '/sounds/notification-failure-pluck.wav',
 };
-let enabled = true;
-try { enabled = localStorage.getItem('oekaki-sound') !== 'off'; } catch {}
+let enabled = false;
+try { enabled = localStorage.getItem('oekaki-sound') === 'on'; } catch {}
 let context;
 const buffers = new Map();
 const musicTracks = { room: '/sounds/bgm-room.mp3', play: '/sounds/bgm-play.mp3' };
-let musicOn = true, musicScene = 'room', musicNode = null, musicRequest = 0, musicLoading = false;
-try {
-  const saved = localStorage.getItem('oekaki-music');
-  musicOn = saved === null ? enabled : saved !== 'off';
-} catch {}
+let musicOn = false, musicScene = 'room', musicNode = null, musicRequest = 0, musicLoading = false;
+try { musicOn = localStorage.getItem('oekaki-music') === 'on'; } catch {}
 function loadBuffer(name, url) {
   if (!buffers.has(name)) {
     buffers.set(name, fetch(url).then(response => {
