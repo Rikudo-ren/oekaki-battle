@@ -143,3 +143,14 @@ test('Realtime Database: 試合終了後、得点記録を残してもう一周�
   assert.equal((await host.ref('secrets/AGAIN1/game/8').get()).val(),'ねこ');
  }finally{await env.cleanup();}
 });
+
+test('Realtime Database: 公開部屋だけは終了画面から新規参加できる',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-public',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  await env.withSecurityRulesDisabled(async c=>{for(const code of ['OPEN01','OPEN02','OPEN03','ABC123'])await c.database().ref(`rooms/${code}`).set({host:'host',phase:'finished',gameId:'game',players:{host:{name:'host',score:0}}});});
+  const guest=env.authenticatedContext('guest').database();
+  for(const code of ['OPEN01','OPEN02','OPEN03'])await assertSucceeds(guest.ref(`rooms/${code}/players/guest`).set({name:'ゲスト',score:0}));
+  await assertFails(guest.ref('rooms/ABC123/players/guest').set({name:'ゲスト',score:0}));
+  await assertFails(guest.ref('rooms/OPEN01/players/other').set({name:'other',score:0}));
+ }finally{await env.cleanup();}
+});
