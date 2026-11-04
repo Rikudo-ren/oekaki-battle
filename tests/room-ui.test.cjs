@@ -15,14 +15,14 @@ function write(p,v){const keys=p.split('/'),stack=[];let o=data;for(const k of k
 function notify(paths){for(const sub of subs)if(sub.active&&paths.some(p=>p===sub.path||p.startsWith(sub.path+'/')||sub.path.startsWith(p+'/')))queueMicrotask(()=>sub.active&&sub.cb({val:()=>clone(getPath(sub.path))}));}
 function apply(p,values){const paths=[];for(const [k,v] of Object.entries(values)){const path=`${p}/${k}`;write(path,v);paths.push(path);}notify(paths);}
 function makeClient(uid,history){const dom=new JSDOM(html,{url:'https://example.test/',runScripts:'outside-only',pretendToBeVisual:true});windows.push(dom.window);const w=dom.window,d=w.document;w.scrollTo=()=>{};w.confirm=()=>true;w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){}});w.HTMLCanvasElement.prototype.setPointerCapture=()=>{};w.FIREBASE_CONFIG={apiKey:'x',databaseURL:'https://example.test',projectId:'x',appId:'x'};
- const whistles=[];w.fetch=async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(0)});
+ const whistles=[],painted=[];w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){painted.push(1);}});w.fetch=async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(0)});
  w.AudioContext=class {constructor(){this.state='running';this.currentTime=0;this.destination={};}decodeAudioData(){return Promise.resolve({});}createBufferSource(){return {connect(){},disconnect(){},start(){},stop(){}};}createGain(){return {gain:{value:0,setValueAtTime(){},linearRampToValueAtTime(){}},connect(){}};}createOscillator(){return {frequency:{setValueAtTime(){},linearRampToValueAtTime(){}},connect(){},start(){whistles.push(true);},stop(){}};}};
  if(history)w.localStorage.setItem('oekaki-recent-rooms',history);
  connections[uid]={offline:[]};
  w.__firebaseMocks={initializeApp:()=>({}),getAuth:()=>({}),getDatabase:()=>({}),signInAnonymously:async()=>({user:{uid}}),ref:(_,p)=>p,query:p=>p,limitToLast:()=>{},serverTimestamp:()=>Date.now(),get:async p=>{if(p.startsWith('secrets/')){const [,c,g,t]=p.split('/'),current=getPath(`rooms/${c}`),end=getPath(`claims/${c}/${g}/${t}/ended/at`);if(!(current?.drawer===uid&&String(current.turn)===t)&&!(Number.isFinite(end)&&Date.now()>=end+2000)){const e=Error('permission_denied');e.code='PERMISSION_DENIED';throw e;}}return {val:()=>clone(getPath(p))};},push:p=>`${p}/${String(++seq).padStart(6,'0')}`,
  set:async(p,v)=>{if(p.startsWith('chats/')&&v){const [,c,g]=p.split('/'),current=getPath(`rooms/${c}`),t=current?.turn,end=getPath(`claims/${c}/${g}/${t}/ended/at`),secret=getPath(`secrets/${c}/${g}/${t}`);if((current.phase==='playing'&&v.text===secret&&!(Number.isFinite(end)&&Date.now()>=end+2000))||(v.kind==='correct'&&(!getPath(`verified/${c}/${g}/${v.turn}/${uid}`)||v.text!=='●●●'))){const error=Error('permission_denied');error.code='PERMISSION_DENIED';throw error;}}if(p.startsWith('verified/')&&v!==null&&p.split('/').length===5){const [,c,g,t]=p.split('/');if(v!==getPath(`secrets/${c}/${g}/${t}`)){const error=Error('permission_denied');error.code='PERMISSION_DENIED';throw error;}}write(p,v);notify([p]);},update:async(p,v)=>apply(p,v),onValue:(p,cb)=>{const sub={path:p,cb,active:true,uid};subs.push(sub);queueMicrotask(()=>sub.active&&cb({val:()=>p==='.info/connected'?true:p==='.info/serverTimeOffset'?0:clone(getPath(p))}));return ()=>{sub.active=false};},
  runTransaction:async(p,cb)=>{const val=cb(clone(getPath(p)));if(val===undefined)return {committed:false,snapshot:{val:()=>clone(getPath(p))}};write(p,val);notify([p]);return {committed:true,snapshot:{val:()=>clone(val)}};},onDisconnect:p=>({update:async v=>{connections[uid].offline.push({p,v});},cancel:async()=>{connections[uid].offline=[];}})};
- w.eval(built.outputFiles[0].text);d.dispatchEvent(new w.Event('pointerdown'));return {dom,d,w,uid,whistles};}
+ w.eval(built.outputFiles[0].text);d.dispatchEvent(new w.Event('pointerdown'));return {dom,d,w,uid,whistles,painted};}
 function disconnect(client){for(const s of subs)if(s.uid===client.uid)s.active=false;for(const {p,v} of connections[client.uid].offline)apply(p,v);connections[client.uid].offline=[];client.dom.window.close();}
 async function sendChat(client,text){client.d.querySelector('#chat-input').value=text;client.d.querySelector('#chat-form').dispatchEvent(new client.w.Event('submit',{bubbles:true,cancelable:true}));await wait();}
 async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('guest');host.d.querySelector('#create-name').value='ホスト';host.d.querySelector('#create').click();await wait();const code=Object.keys(data.rooms)[0];guest.d.querySelector('#join-name').value='ゲスト';guest.d.querySelector('#join-code').value=code;guest.d.querySelector('#join').click();await wait();assert.ok(getPath(`rooms/${code}/online/host`));assert.ok(getPath(`rooms/${code}/online/guest`));return {host,guest,code};}
@@ -34,6 +34,42 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
  c.d.querySelector('#chat-expand').click();assert.ok(c.d.body.classList.contains('chat-open'));assert.equal(c.d.querySelector('#chat-expand').getAttribute('aria-expanded'),'true');c.d.querySelector('#chat-backdrop').click();assert.equal(c.d.body.classList.contains('chat-open'),false);
  c.d.querySelector('#music-toggle').click();assert.equal(c.d.querySelector('#music-toggle').getAttribute('aria-pressed'),'false');
  c.d.querySelector('#leave').click();await wait();assert.equal(c.d.body.classList.contains('screen-lobby'),false);c.dom.window.close();data={};subs=[];
+}
+// Public room entrances are shared, reusable after everyone leaves, and let
+// a newcomer join the finished room without revealing private rooms.
+{
+ const host=makeClient('host'),guest=makeClient('guest');host.d.querySelector('#quick-name').value='ホスト';guest.d.querySelector('#quick-name').value='ゲスト';
+ host.d.querySelector('[data-public-room="OPEN01"]').click();guest.d.querySelector('[data-public-room="OPEN01"]').click();await wait(200);
+ assert.ok(getPath('rooms/OPEN01/players/host'));assert.ok(getPath('rooms/OPEN01/players/guest'));assert.match(host.d.querySelector('#room-code-title').textContent,/公開部屋/);
+ write('rooms/OPEN01/phase','finished');notify(['rooms/OPEN01']);await wait();const late=makeClient('late');late.d.querySelector('#quick-name').value='新しい人';late.d.querySelector('[data-public-room="OPEN01"]').click();await wait();assert.ok(getPath('rooms/OPEN01/players/late'));
+ host.d.querySelector('#leave').click();await wait();guest.d.querySelector('#leave').click();await wait();late.d.querySelector('#leave').click();await wait();assert.equal(getPath('rooms/OPEN01'),undefined);
+ host.d.querySelector('[data-public-room="OPEN01"]').click();await wait();assert.ok(getPath('rooms/OPEN01/players/host'));host.dom.window.close();guest.dom.window.close();late.dom.window.close();data={};subs=[];
+}
+// Single-player uses local data, draws a prepared topic and rejects wrong
+// guesses. CPU answers are simulated without any Firebase writes.
+{
+ const c=makeClient('human');Object.defineProperty(c.w.crypto,'getRandomValues',{value:array=>{array.fill(0);return array;}});c.d.querySelector('#quick-name').value='ひとり';c.d.querySelector('#solo-start').click();await wait(250);
+ assert.match(c.d.querySelector('#room-code-title').textContent,/CPU対戦/);assert.match(c.d.querySelector('#players').textContent,/もも CPU/);assert.deepEqual(data,{});
+ c.d.querySelector('#time-limit').value='custom';c.d.querySelector('#custom-time').value='10';c.d.querySelector('#time-limit').dispatchEvent(new c.w.Event('change'));c.d.querySelector('#start').click();await wait(3500);
+ assert.match(c.d.querySelector('.game-player.is-drawer').textContent,/CPU/);assert.ok(c.painted.length>0);await sendChat(c,'まちがい');assert.doesNotMatch(c.d.querySelector('#chat-messages').textContent,/正解！/);
+ await wait(2500);assert.match(c.d.querySelector('#answer-slots').textContent,/正解 [1-2] \/ 3/);await sendChat(c,'いぬ');await wait(3800);assert.match(c.d.querySelector('#result').textContent,/答えは「いぬ」/);assert.match(c.d.querySelector('#scoreboard-list').textContent,/ひとり/);assert.deepEqual(data,{});
+ c.d.querySelector('#leave').click();await wait();assert.equal(c.d.querySelector('#home').classList.contains('hidden'),false);
+ // Switching to a real room after solo restores the Firebase client.
+ c.d.querySelector('#create-name').value='人間';c.d.querySelector('#create').click();await wait();assert.ok(data.rooms);c.dom.window.close();data={};subs=[];
+}
+// A complete solo lap and an extra lap, including simulated CPU guesses on
+// the human's drawing turn. A virtual clock avoids waiting for animations.
+{
+ const c=makeClient('human');Object.defineProperty(c.w.crypto,'getRandomValues',{value:a=>{a.fill(0);return a;}});let elapsed=0;const now=Date.now;c.w.Date.now=()=>now()+elapsed;c.w.__firebaseMocks.serverTimestamp=()=>({'.sv':'timestamp'});
+ c.d.querySelector('#quick-name').value='ひとり';c.d.querySelector('#solo-start').click();await wait(150);c.d.querySelector('#start').click();await wait(250);
+ for(let i=0;i<4;i++){
+  elapsed+=i===2?20000:4000;await wait(350);
+  if(i===2){assert.match(c.d.querySelector('.game-player.is-drawer').textContent,/ひとり/);assert.match(c.d.querySelector('#answer-slots').textContent,/正解 [1-3] \/ 3/);}
+  c.d.querySelector('#gm-open').click();c.d.querySelector('#whistle').click();c.d.querySelector('#gm-close').click();await wait(100);elapsed+=8000;await wait(350);assert.equal(c.d.querySelector('#next').classList.contains('hidden'),false);c.d.querySelector('#next').click();await wait(150);
+ }
+ assert.match(c.d.querySelector('#prompt').textContent,/おつかれ/);assert.match(c.d.querySelector('#result').textContent,/ポイント/);
+ c.d.querySelector('#again').click();await wait(200);assert.match(c.d.querySelector('#turn-label').textContent,/5 \/ 8/);assert.match(c.d.querySelector('.game-player.is-drawer').textContent,/CPU/);
+ elapsed+=4000;await wait(900);assert.equal(c.d.querySelector('#canvas-placeholder').classList.contains('hidden'),true);assert.deepEqual(data,{});c.dom.window.close();data={};subs=[];
 }
 // Voluntary host exit hands off; the last person removes all game resources.
 {
