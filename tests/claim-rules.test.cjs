@@ -29,6 +29,8 @@ test('正解を伏せたチャットだけを保存し、発表前の答え本�
  assert.match(chat['.validate'],/child\('text'\).*●●●/);
  assert.match(chat['.validate'],/child\('verified'\)/);
  assert.match(chat['.validate'],/child\('secrets'\)/);
+ assert.match(chat['.validate'],/child\('turn'\).*child\('phase'\).*playing/);
+ assert.match(chat['.validate'],/!root.child\('claims'\).*child\('ended'\).exists/);
  assert.match(chat['.validate'],/ended.*now.*2000/);
  assert.equal(chat.$other['.validate'],false);
  const guard=rules.chatGuard.$room.$game.$turn.$uid;assert.match(guard['.write'],/auth.uid == \$uid/);assert.match(guard['.write'],/child\('ended'\)/);assert.equal(guard['.validate'],'newData.val() == true');assert.equal(guard['.read'],undefined);

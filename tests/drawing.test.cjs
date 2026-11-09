@@ -37,6 +37,7 @@ test('データベースルールは部屋のメンバーに限定したチャ�
   assert.match(drawing['.write'],/drawer/);
   assert.match(drawing['.validate'],/'undo'/);
   assert.match(drawing['.validate'],/'clear'/);
+  assert.match(drawing['.validate'],/color'\).val\(\) == '#ffffff'.*width'\).val\(\) <= 100/);
 });
 
 test('正方形の画面でも以前の900×540座標を使って同期する', async () => {

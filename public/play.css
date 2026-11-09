@@ -691,3 +691,28 @@ body.screen-game .is-between-rounds .canvas-wrap{display:none}
 @media(max-width:700px){body.screen-game .round-choice{padding:7px}body.screen-game .round-choice strong{margin-bottom:4px;font-size:13px}body.screen-game .round-choice-actions button{min-height:32px;font-size:12px}}
 body.screen-game .round-choice-actions button{flex:1 1 210px;width:auto;height:auto;margin:0;padding:9px 12px}
 @media(max-width:700px){body.screen-game .round-choice-actions button{flex-basis:120px}}
+
+/* The white swatch is an identifiable eraser; its size is independent of the pen. */
+body.screen-game .colors #eraser{color:#39738b;font-size:12px;font-weight:900;line-height:1;text-align:center}
+body.screen-game .brush-slider{width:190px;max-width:85vw}
+body.screen-game .brush-slider input{flex:1;min-width:45px}
+body.screen-game .brush-slider output{min-width:22px;text-align:right;font-variant-numeric:tabular-nums}
+@media(min-width:701px){body.screen-game .brush-slider{left:auto;right:0;transform:none}}
+/* Keep both size controls visible without pushing the other tools off screen. */
+body.screen-game .brush-slider{left:auto;right:0;transform:none}
+@media(max-width:700px){
+ body.screen-game.is-drawing-turn .tools:not(.hidden){display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center}
+ body.screen-game.is-drawing-turn .tool-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;min-width:0}
+ body.screen-game.is-drawing-turn .tool-button:not(.whistle),body.screen-game.is-drawing-turn .brush-menu summary{min-height:25px;padding:3px 1px;font-size:9px;text-align:center}
+}
+@media(max-width:360px){body.screen-game.is-drawing-turn .colors{gap:3px}body.screen-game.is-drawing-turn .colors button{width:21px;height:21px}}
+/* On phones the compact role badge already identifies the drawer. Avoid the
+   floating player badge covering the second row of drawing controls. */
+@media(max-width:700px){body.screen-game.is-drawing-turn .game-player.is-drawer .game-player-role{display:none}}
+
+/* Correct answers should stand out without blocking the drawing gesture. */
+.correct-notice{top:6%;padding:12px 20px;max-width:94%;animation-duration:3.2s}
+.correct-notice strong{font-size:clamp(19px,2.5vw,27px);line-height:1.3}
+.correct-notice small{font-size:clamp(11px,1.5vw,14px)}
+.round-end-card{max-width:min(680px,92vw)}
+.round-end-card small{max-width:100%;overflow-wrap:anywhere;text-align:center}
