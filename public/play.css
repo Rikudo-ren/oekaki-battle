@@ -630,3 +630,5 @@ body.screen-game .game-stage.is-my-turn .prompt-line h2{color:#8f512b}
 .ai-settings-body .ai-model-status{margin:9px 0 6px;color:#276e8a;font-weight:800}.ai-settings-body .ai-warning{margin:0;font-size:11px;color:#876333}
 @media(max-width:700px){.ai-fields{grid-template-columns:1fr}.ai-fields #ai-custom-wrap{grid-column:auto}}
 .ai-start{margin-top:11px;padding:10px 16px;border:0;border-radius:9px;background:#ef806d;color:#fff;font-size:12px;font-weight:900;box-shadow:0 3px 0 #d26955}
+
+body.screen-game .game-status #ai-game-status:not(.hidden){display:block;grid-column:1 / -1;white-space:normal;overflow:visible;margin:5px 0;padding:7px 10px;border:1px solid #88b9d0;border-radius:8px;background:#edf8ff;color:#174f6b;font-size:13px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}

@@ -126,7 +126,7 @@ async function call(name,data){
       } catch(e){await transaction(`rooms/${data.code}`,current=>{if(current?.phase==='starting'&&current.host===user.uid)current.phase='lobby';return current;});if(e.code==='PERMISSION_DENIED'||e.message?.toLowerCase().includes('permission_denied'))throw Error('再スタートには最新のFirebaseルールの公開が必要です。');throw e;}
     }
     const schedule=Array.from({length:rounds},()=>order).flat();
-    const answers=shuffle(topics).slice(0,8*rounds).map((word,i)=>soloMode&&CPU_IDS.includes(schedule[i])?cpuWord(shuffle):word),matchId=randomId(20);
+    const answers=shuffle(topics).slice(0,8*rounds).map((word,i)=>soloMode&&!soloAI&&CPU_IDS.includes(schedule[i])?cpuWord(shuffle):word),matchId=randomId(20);
     try{
       await waitForWrites(answers.flatMap((answer,i)=>{const writes=[set(ref(db,`secrets/${data.code}/${gameId}/${i}`),answer)];if(hintSeconds)writes.push(set(ref(db,`hints/${data.code}/${gameId}/${i}`),createHint(answer,shuffle)));return writes;}));
       const started=await transaction(`rooms/${data.code}`,current=>{
@@ -203,7 +203,7 @@ async function call(name,data){
     if(!locked.committed)throw Error('もう一周を開始できませんでした。');
     const state=locked.snapshot.val(),base=state.nextTurnIndex,firstIndex=8*(state.rounds+(state.extraRounds||0));
     const plannedOrder=[...(state.order||[]).filter(uid=>state.players?.[uid]),...Object.keys(state.players||{}).filter(uid=>!(state.order||[]).includes(uid)).sort()];
-    const words=shuffle(topics).slice(0,8).map((word,i)=>soloMode&&CPU_IDS.includes(plannedOrder[i])?cpuWord(shuffle):word);
+    const words=shuffle(topics).slice(0,8).map((word,i)=>soloMode&&!soloAI&&CPU_IDS.includes(plannedOrder[i])?cpuWord(shuffle):word);
     try{
       await waitForWrites(words.flatMap((word,i)=>{
         const writes=[set(ref(db,`secrets/${roomCode}/${gameId}/${base+i}`),word)];
@@ -315,8 +315,8 @@ function maybeTransferHost(){
 }
 async function action(button, task){const entry=button.closest('#home'),buttons=entry?[...entry.querySelectorAll('#create,#join,#solo-start,#ai-start,[data-public-room]')]:[button];if(buttons.some(item=>item.disabled))return;buttons.forEach(item=>item.disabled=true);try{await task();}catch(e){toast(friendly(e));}finally{buttons.forEach(item=>item.disabled=false);}}
 function enterRoom(roomCode){
-  $('time-limit').value='30';
-  code=roomCode; startPresence(roomCode);show('home',false);show('room',true);$('room-code').textContent=soloMode?'CPU対戦':(PUBLIC_ROOMS[code]||code);$('room-code-kicker').textContent=soloMode?'SOLO MODE':PUBLIC_ROOMS[code]?'PUBLIC ROOM':'ROOM CODE';$('room-code-icon').textContent=soloMode?'🤖':PUBLIC_ROOMS[code]?'🌐':'💌';show('copy',!soloMode&&!PUBLIC_ROOMS[code]);$('room-code-title').textContent=soloMode?'ひとりでCPU対戦':PUBLIC_ROOMS[code]?'だれでも入れる公開部屋':'部屋の合言葉';$('room-code-description').textContent=soloMode?'CPUと交互に描いて当てよう！':PUBLIC_ROOMS[code]?'誰でも途中から参加できます':'この合言葉を友だちに教えてね';
+  $('time-limit').value=soloMode&&soloAI?'60':'30';
+  code=roomCode; startPresence(roomCode);show('home',false);show('room',true);$('room-code').textContent=soloMode?(soloAI?'AI対戦':'CPU対戦'):(PUBLIC_ROOMS[code]||code);$('room-code-kicker').textContent=soloMode?'SOLO MODE':PUBLIC_ROOMS[code]?'PUBLIC ROOM':'ROOM CODE';$('room-code-icon').textContent=soloMode?'🤖':PUBLIC_ROOMS[code]?'🌐':'💌';show('copy',!soloMode&&!PUBLIC_ROOMS[code]);$('room-code-title').textContent=soloMode?(soloAI?'ひとりでAI対戦':'ひとりでCPU対戦'):PUBLIC_ROOMS[code]?'だれでも入れる公開部屋':'部屋の合言葉';$('room-code-description').textContent=soloMode?(soloAI?'AIと交互に描いて当てよう！':'CPUと交互に描いて当てよう！'):PUBLIC_ROOMS[code]?'誰でも途中から参加できます':'この合言葉を友だちに教えてね';
   if(unsubscribe) unsubscribe();
   unsubscribe=onValue(ref(db,`rooms/${code}`), snap=>{room=snap.val();if(!room){if(leavingRoom===roomCode)return;toast('部屋が終了しました。');goHome();return;}if(room.phase==='closing'){if(leavingRoom===roomCode)return;toast('GMが退出したため、部屋が終了しました。');goHome();return;}maybeTransferHost();if(subscribedGameId!==room.gameId){
    if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();if(unsubscribeDrawing)unsubscribeDrawing();
@@ -325,7 +325,7 @@ function enterRoom(roomCode){
   if(timerHandle)clearInterval(timerHandle);timerHandle=setInterval(()=>{updateTimer();maybeTransferHost();maybeSkipAbsentDrawer();maybePruneLobby();maybeAdvancePass();maybeRunSoloBots();},250);
   window.scrollTo(0,0);
 }
-function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;soloAI=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);show('room',false);show('home',true);}
+function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;soloAI=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);setAiStatus('');show('room',false);show('home',true);}
 function refreshSoundButton(){const on=soundEnabled(),button=$('sound-toggle');button.setAttribute('aria-pressed',String(on));button.setAttribute('aria-label',on?'効果音をオフにする':'効果音をオンにする');button.querySelector('span').textContent=on?'効果音 ON':'効果音 OFF';}
 $('sound-toggle').onclick=()=>{setSoundEnabled(!soundEnabled());refreshSoundButton();if(soundEnabled())playSound('turn');};
 document.addEventListener('pointerdown',unlockAudio,{passive:true});document.addEventListener('keydown',unlockAudio);
@@ -360,6 +360,8 @@ function updateHintSetting(){
 for(const id of ['time-limit','custom-time'])$(id).addEventListener('change',updateHintSetting);
 $('create').onclick=()=>action($('create'),async()=>{const name=$('create-name').value.trim();if(!name)throw Error('なまえを入力してね。');await connect();const result=await call('createRoom',{name});enterRoom(result.code);void sweepKnownRooms();});
 function resetAiModels(){
+ $('solo-start').querySelector('strong').textContent=$('ai-key').value.trim()?'✨ ひとりでAI対戦':'✎ ひとりでCPU対戦';
+ $('solo-start').querySelector('span').textContent=$('ai-key').value.trim()?'選択したAIと交互に描いて当てよう':'CPUと交互に描いて当てよう';
  if(aiModelAbort)aiModelAbort.abort();aiModelAbort=null;
  const select=$('ai-model');select.replaceChildren(new Option('モデルを選択',''),new Option('モデルIDを直接入力','__custom'));select.value='';show('ai-custom-wrap',false);
  setText('ai-model-status','キーを入力してモデル一覧を取得するか、モデルIDを直接入力してください。');$('ai-load-models').disabled=false;
@@ -388,12 +390,12 @@ async function startSolo(){
  soloAI=key?{provider:$('ai-provider').value,key,model}:null;
  savedUser=user;savedDb=db;soloMode=true;user={uid:'solo-human'};db=createMemoryDatabase();serverOffset=0;
  const players={[user.uid]:{name,score:0}},online={};
- CPU_IDS.forEach((uid,i)=>{players[uid]={name:uid===AI_BOT&&soloAI?'あい AI':['もも','そら','まる'][i]+' CPU',score:0};online[uid]={local:true};});
+ (soloAI?[AI_BOT]:CPU_IDS).forEach((uid,i)=>{players[uid]={name:soloAI?'あい AI':['もも','そら','まる'][i]+' CPU',score:0};online[uid]={local:true};});
  const roomCode='SOLO00';await set(ref(db,`rooms/${roomCode}`),{host:user.uid,phase:'lobby',gameId:randomId(20),players,online,createdAt:serverTimestamp(),lastOnline:serverTimestamp()});
  $('hint-seconds').value='10';enterRoom(roomCode);
 }
 $('solo-start').onclick=()=>action($('solo-start'),startSolo);
-$('ai-start').onclick=()=>action($('ai-start'),startSolo);
+$('ai-start').onclick=()=>action($('ai-start'),async()=>{if(!$('ai-key').value.trim())throw Error('AI対戦にはAPIキーを入力してね。');await startSolo();});
 document.querySelectorAll('[data-public-room]').forEach(button=>button.onclick=()=>action(button,async()=>{
  const name=$('quick-name').value.trim();if(!name)throw Error('なまえを入力してね。');await connect();const roomCode=button.dataset.publicRoom;await call('openPublicRoom',{name,code:roomCode});enterRoom(roomCode);void sweepKnownRooms();
 }));
@@ -568,7 +570,7 @@ function render(){
  const showFinal=finalSceneVisible(room,now);show('final-scene',showFinal);if(showFinal&&finalSceneKey!==`${sceneKey}:${room.finishedAt}`){finalSceneKey=`${sceneKey}:${room.finishedAt}`;$('final-scene').style.setProperty('--scene-offset',`${-Math.max(0,now-room.finishedAt)}ms`);}if(!showFinal)finalSceneKey='';document.body.classList.toggle('screen-lobby',lobby);document.body.classList.toggle('screen-game',!lobby);$('game').classList.toggle('is-ended',ended);$('game').classList.toggle('is-revealed',revealed);setMusicScene(lobby||finished?'room':'play');
  show('lobby',lobby);show('game',!lobby);show('players-panel',lobby);show('start',host&&room.phase==='lobby');show('settings-open',host&&room.phase==='lobby');$('settings-label').textContent=host?'⚙️ ルールをカスタマイズ':'⚙️ ルールはホストが設定します';show('start-hint',lobby&&(!host||room.phase==='starting'));$('start-hint').textContent=room.phase==='starting'?'ゲームを準備しています…':'ホストがゲームを開始するまで待ってね';$('rounds').disabled=!host;$('time-limit').disabled=!host;updateHintSetting();updateGameSounds();
  $('room-title').textContent=lobby?'みんなの部屋':finished?'ゲーム終了！':'おえかきバトル！';
- $('room-subtitle').textContent=soloMode?(soloAI?'AIとCPUに挑戦':'ひとりでCPUと対戦'):PUBLIC_ROOMS[code]?PUBLIC_ROOMS[code]:lobby?'友だちを招待しよう！':`合言葉 ${code}`;
+ $('room-subtitle').textContent=soloMode?(soloAI?'AIと1対1で対戦':'ひとりでCPUと対戦'):PUBLIC_ROOMS[code]?PUBLIC_ROOMS[code]:lobby?'友だちを招待しよう！':`合言葉 ${code}`;
  const scores=lobby?null:scoresForRoom(room,claims,Date.now()+serverOffset),finalRanks=finished?ranking(room,scores):[];
  const players=Object.entries(room.players||{}).map(([id,p])=>[id,{...p,score:lobby?(p.score||0):scores[id]}]); $('player-count').textContent=`${players.length}人`;
  const order=room.order||players.map(([id])=>id);players.sort((a,b)=>{const sequence=finished?finalRanks.map(item=>item.uid):order;const x=sequence.indexOf(a[0]),y=sequence.indexOf(b[0]);return (x<0?Infinity:x)-(y<0?Infinity:y)||a[0].localeCompare(b[0]);});
@@ -756,8 +758,9 @@ function maybeAdvancePass(){
  })().catch(e=>{console.error('パス後のお題を再試行します',e);}).finally(()=>{if(passAdvancePending===key)passAdvancePending='';passRetryAt=Date.now()+1000;});
 }
 
-// The optional AI is one local opponent. The other two bots retain their
-// simulated behavior; the AI only receives a canvas image, never the answer.
+// In AI mode the only opponent is the AI. It receives a canvas image, never the answer.
+function setAiStatus(message){setText('ai-game-status',message);show('ai-game-status',!!message);}
+function aiError(error){return error?.name==='AbortError'?'通信がタイムアウトしました。':error instanceof TypeError?'サイトのAI中継に接続できませんでした。':error?.message||'通信に失敗しました。';}
 function soloTurnIsCurrent(key){return soloMode&&!!room&&room.phase==='playing'&&botTurnKey===key&&!claims[room.turn]?.ended;}
 function aiCanvasImage(){
  const snapshot=document.createElement('canvas');snapshot.width=384;snapshot.height=384;const context=snapshot.getContext('2d');
@@ -781,6 +784,7 @@ async function aiGuess(bot,key,roomCode,gameId,turn,start,duration,limit,current
   const length=room.lengths[turn],image=aiCanvasImage();
   const result=await aiRequest(soloAI,'guess',{length,image},controller.signal);
   if(!soloTurnIsCurrent(key)||db!==currentDb||turnExpired())return;
+  setAiStatus('AIが回答しました。');
   const guess=parseAiGuess(result.text,length);
   if(guess){
    const answer=(await get(ref(currentDb,`secrets/${roomCode}/${gameId}/${turn}`))).val();
@@ -790,31 +794,30 @@ async function aiGuess(bot,key,roomCode,gameId,turn,start,duration,limit,current
   }
   if(bot.attempts>=2)bot.done=true;else bot.at=Date.now()+serverOffset-start+7000;
  }catch(e){
-  if(soloTurnIsCurrent(key)&&db===currentDb&&!turnExpired()&&!controller.signal.aborted){bot.fallback=true;toast('AIの回答に失敗したため、このターンはCPUが代わりに回答します。');}
+  if(soloTurnIsCurrent(key)&&db===currentDb&&!turnExpired()&&!controller.signal.aborted){bot.done=true;setAiStatus(`AIの回答に失敗しました：${aiError(e)}（CPUの代行はありません）`);}
  }finally{bot.busy=false;if(aiAbort===controller)aiAbort=null;}
 }
 function maybeRunSoloBots(){
- if(!soloMode||!room||room.phase!=='playing'){if(aiAbort)aiAbort.abort();aiAbort=null;return;}
+ if(!soloMode||!room||room.phase!=='playing'){if(aiAbort)aiAbort.abort();aiAbort=null;setAiStatus('');return;}
  const {turn,gameId}=room,roomCode=code,key=`${roomCode}:${gameId}:${room.matchId}:${turn}`,now=Date.now()+serverOffset,start=turnStart(room),claim=claims[turn];
  if(botTurnKey!==key){
-  if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;botTurnKey=key;botWord='';botDrawn=0;botLoading=false;botWriting=false;
-  botPlan=CPU_IDS.filter(uid=>uid!==room.drawer).map((uid,i)=>({uid,at:(room.timeLimit?room.timeLimit*1000:40000)*(.22+i*.20+randomInt(10)/100),done:false,busy:false,attempts:0,fallback:false}));
+  if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;botTurnKey=key;botWord='';botDrawn=0;botLoading=false;botWriting=false;setAiStatus('');
+  botPlan=(soloAI?[AI_BOT]:CPU_IDS).filter(uid=>uid!==room.drawer).map((uid,i)=>({uid,at:(room.timeLimit?room.timeLimit*1000:40000)*(.22+i*.20+randomInt(10)/100),done:false,busy:false,attempts:0}));
  }
- if(claim?.ended||!Number.isFinite(start)||room.timeLimit&&now>=start+room.timeLimit*1000){if(aiAbort)aiAbort.abort();aiAbort=null;return;}
+ if(claim?.ended||!Number.isFinite(start)||room.timeLimit&&now>=start+room.timeLimit*1000){if(aiAbort)aiAbort.abort();aiAbort=null;if(claim?.ended){if(claim.ended.reason==='time'&&aiDraw?.pending)setAiStatus('AIの絵を待っている間に時間切れになりました。制限時間を長くしてお試しください。');else setAiStatus('');}return;}
  // Begin fetching the AI line drawing during the countdown to reduce latency.
  if(CPU_IDS.includes(room.drawer)&&!botWord&&!botLoading){botLoading=true;get(ref(db,`secrets/${roomCode}/${gameId}/${turn}`)).then(snap=>{if(soloTurnIsCurrent(key))botWord=snap.val()||'';}).finally(()=>{if(botTurnKey===key)botLoading=false;});}
  if(room.drawer===AI_BOT&&soloAI&&botWord&&!aiDraw){
-  const controller=new AbortController(),state={pending:true,drawing:null,controller};aiDraw=state;aiAbort=controller;
+  const controller=new AbortController(),state={pending:true,drawing:null,controller};aiDraw=state;aiAbort=controller;setAiStatus('AIに絵の生成を依頼しています…');
   aiRequest(soloAI,'draw',{word:botWord},controller.signal).then(result=>{
    if(!soloTurnIsCurrent(key)||aiDraw!==state||!state.pending||controller.signal.aborted)return;
-   const drawing=parseAiDrawing(result.text);if(!drawing)throw Error('invalid drawing');state.drawing=drawing;state.pending=false;
-  }).catch(()=>{if(soloTurnIsCurrent(key)&&aiDraw===state&&!controller.signal.aborted){state.pending=false;toast('AIの描画に失敗したため、このターンはCPUの絵を表示します。');}}).finally(()=>{if(aiAbort===controller)aiAbort=null;});
+   const drawing=parseAiDrawing(result.text);if(!drawing)throw Error('描画データの形式が不正でした。');state.drawing=drawing;state.pending=false;setAiStatus('選択したAIが生成した絵です。');
+  }).catch(e=>{if(soloTurnIsCurrent(key)&&aiDraw===state&&!controller.signal.aborted){state.pending=false;setAiStatus(`AIの描画に失敗しました：${aiError(e)} CPUの絵は使いません。GMからターンを終了できます。`);}}).finally(()=>{if(aiAbort===controller)aiAbort=null;});
  }
  if(now<start)return;
  const elapsed=now-start;
  if(CPU_IDS.includes(room.drawer)){
-  if(aiDraw?.pending&&elapsed>=8000){aiDraw.pending=false;aiDraw.controller.abort();toast('AIの描画に時間がかかったため、このターンはCPUの絵を表示します。');}
-  const drawing=room.drawer===AI_BOT&&soloAI?(aiDraw?.pending?null:aiDraw?.drawing||soloDrawings[botWord]):soloDrawings[botWord];
+  const drawing=soloAI?aiDraw?.drawing:soloDrawings[botWord];
   if(drawing&&!botWriting&&botDrawn<drawing.length){
    const step=Math.min(600,Math.max(180,(room.timeLimit||40)*650/drawing.length));
    if(elapsed>=botDrawn*step){const stroke=drawing[botDrawn++];botWriting=true;const target=ref(db,`drawings/${roomCode}/${gameId}/${turn}`);set(push(target),{color:stroke.color,width:stroke.width,points:JSON.stringify(stroke.points)}).catch(console.error).finally(()=>{if(botTurnKey===key)botWriting=false;});}
@@ -823,9 +826,9 @@ function maybeRunSoloBots(){
  for(const bot of botPlan){
   if(bot.done||bot.busy||elapsed<bot.at)continue;
   const currentDb=db,duration=room.timeLimit,limit=room.maxCorrect;
-  if(soloAI&&bot.uid===AI_BOT&&!bot.fallback){
+  if(soloAI&&bot.uid===AI_BOT){
    if(!strokes.length)continue;
-   void aiGuess(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb);continue;
+   setAiStatus('AIが絵を見て回答を考えています…');void aiGuess(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb);continue;
   }
   bot.done=true;void recordBotCorrect(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb).catch(console.error);
  }

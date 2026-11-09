@@ -8,6 +8,8 @@ test('AIの描画と回答は形式と範囲を厳しく検証する',async()=>{
  const {parseAiDrawing,parseAiGuess}=await import('../src/ai.mjs');
  const drawing={strokes:[{color:'#393632',width:7,points:[[1,2],[800,500]]},{color:'#ef806d',width:5,points:[[4,5],[6,7]]}]};
  assert.equal(parseAiDrawing('```json\n'+JSON.stringify(drawing)+'\n```').length,2);
+ assert.equal(parseAiDrawing(JSON.stringify({...drawing,strokes:[{...drawing.strokes[0],points:[[0,0],[900,540]]},drawing.strokes[1]]})).length,2);
+ assert.equal(parseAiDrawing(JSON.stringify({...drawing,strokes:[{...drawing.strokes[0],points:[[0,0],[0,541]]},drawing.strokes[1]]})),null);
  assert.equal(parseAiDrawing('{}'),null);assert.equal(parseAiDrawing('not json'),null);
  assert.equal(parseAiDrawing(JSON.stringify({...drawing,strokes:[{...drawing.strokes[0],points:[[0,0],[901,0]]},drawing.strokes[1]]})),null);
  assert.equal(parseAiDrawing(JSON.stringify({...drawing,strokes:[{...drawing.strokes[0],color:'url(evil)'},drawing.strokes[1]]})),null);
