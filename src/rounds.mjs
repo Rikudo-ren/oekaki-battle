@@ -28,3 +28,12 @@ export function extendSchedule(schedule, players, rounds) {
   const newcomers = Object.keys(players || {}).filter(uid => !scheduled.has(uid)).sort();
   return [...existing, ...Array.from({length: rounds}, () => newcomers).flat()];
 }
+
+// Keep schedule slots and turn IDs stable, but never start an offline player's turn.
+export function nextOnlineScheduleIndex(room, schedule, start) {
+  for (let i=start;i<schedule.length;i++) {
+    const uid=schedule[i];
+    if (room.players?.[uid] && room.online?.[uid] && Object.keys(room.online[uid]).length) return i;
+  }
+  return -1;
+}

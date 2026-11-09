@@ -632,3 +632,47 @@ body.screen-game .game-stage.is-my-turn .prompt-line h2{color:#8f512b}
 .ai-start{margin-top:11px;padding:10px 16px;border:0;border-radius:9px;background:#ef806d;color:#fff;font-size:12px;font-weight:900;box-shadow:0 3px 0 #d26955}
 
 body.screen-game .game-status #ai-game-status:not(.hidden){display:block;grid-column:1 / -1;white-space:normal;overflow:visible;margin:5px 0;padding:7px 10px;border:1px solid #88b9d0;border-radius:8px;background:#edf8ff;color:#174f6b;font-size:13px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+
+/* Only the active drawer gets a space-saving drawing layout.  Scores, timer,
+   score bands, chat history and the chat input remain available. */
+@media(min-width:701px){
+ body.screen-game.is-drawing-turn .room-side{height:100px}
+ body.screen-game.is-drawing-turn .room-heading{min-height:21px}
+ body.screen-game.is-drawing-turn .room-heading h1{font-size:13px}
+ body.screen-game.is-drawing-turn .room-heading p{font-size:10px}
+ body.screen-game.is-drawing-turn .game-status{padding:5px 8px;gap:5px}
+ body.screen-game.is-drawing-turn .turn-role:not(.hidden){display:none}
+ body.screen-game.is-drawing-turn .game-stage{grid-template-columns:minmax(112px,155px) minmax(0,1fr) minmax(110px,135px)}
+ body.screen-game.is-drawing-turn .game-players{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+ body.screen-game.is-drawing-turn .game-players::before{margin:0 0 3px}
+ body.screen-game.is-drawing-turn .game-player{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:0;padding:3px}
+ body.screen-game.is-drawing-turn .game-player .avatar{width:25px;height:25px;font-size:15px}
+ body.screen-game.is-drawing-turn .game-player-name{width:100%;text-align:center;font-size:10px;line-height:1.1}
+ body.screen-game.is-drawing-turn .game-player-score{font-size:10px;line-height:1.1}
+ body.screen-game.is-drawing-turn .tools:not(.hidden){gap:6px}
+ body.screen-game.is-drawing-turn .tool-heading small,body.screen-game.is-drawing-turn .tool-heading span{display:none}
+ body.screen-game.is-drawing-turn .colors{grid-template-columns:repeat(3,30px);gap:5px}
+ body.screen-game.is-drawing-turn .colors button{width:30px;height:30px}
+ body.screen-game.is-drawing-turn .tool-actions{width:min(110px,100%);gap:4px}
+ body.screen-game.is-drawing-turn .tool-button:not(.whistle),body.screen-game.is-drawing-turn .brush-menu summary{min-height:30px;padding:5px;font-size:11px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-panel{padding:6px 10px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-form input{height:36px}
+}
+@media(max-width:700px){
+ body.screen-game.is-drawing-turn .room-side{height:96px;min-height:96px}
+ body.screen-game.is-drawing-turn .game-players{padding-top:2px;gap:2px}
+ body.screen-game.is-drawing-turn .game-player{padding:1px;gap:0}
+ body.screen-game.is-drawing-turn .game-player .avatar{width:22px;height:22px;font-size:14px}
+ body.screen-game.is-drawing-turn .game-player-name,body.screen-game.is-drawing-turn .game-player-score{font-size:9px;line-height:1.05}
+ body.screen-game.is-drawing-turn .tools:not(.hidden){padding:3px 1px;gap:4px}
+ body.screen-game.is-drawing-turn .tool-button:not(.whistle),body.screen-game.is-drawing-turn .brush-menu summary{min-height:28px;padding:4px;font-size:10px}
+ body.screen-game.is-drawing-turn .colors{gap:4px}
+ body.screen-game.is-drawing-turn .colors button{width:24px;height:24px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-panel{padding:4px 6px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-form input{height:31px}
+}
+@media(max-width:700px) and (max-height:700px){
+ body.screen-game.is-drawing-turn .room-side{height:82px;min-height:82px}
+ body.screen-game.is-drawing-turn .gauge-heading{display:flex;margin-bottom:1px;font-size:8px;line-height:1}
+ body.screen-game.is-drawing-turn .game-player .avatar{width:19px;height:19px;font-size:12px}
+}

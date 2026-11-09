@@ -27,7 +27,7 @@ export const RESULT_SCENE_MS = END_SCENE_MS + ANSWER_SCENE_MS + SCORE_SCENE_MS;
 export const FINAL_SCENE_MS = 4500;
 export const GO_SCENE_MS = 600;
 export function resultScene(claim, now) {
- if (!Number.isFinite(claim?.ended?.at) || !Number.isFinite(now) || claim.ended.reason === 'pass') return null;
+ if (!Number.isFinite(claim?.ended?.at) || !Number.isFinite(now) || (claim.ended.reason === 'pass' || claim.ended.reason === 'skip')) return null;
  const age = Math.max(0, now - claim.ended.at);
  if (age < END_SCENE_MS) return 'end';
  if (age < END_SCENE_MS + ANSWER_SCENE_MS) return 'answer';

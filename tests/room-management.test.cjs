@@ -20,11 +20,12 @@ test('全員不在で5分を過ぎた部屋だけ、次回アクセス時に片�
   assert.equal(isAbandoned({lastOnline,online:{alice:{tab:true}}},lastOnline+ABANDONED_AFTER_MS),false);
   assert.equal(isAbandoned({},lastOnline+ABANDONED_AFTER_MS),false); // 古い画面の部屋は誤削除しない
 });
-test('描き手が30秒離席するとスキップ対象、接続中なら対象外', async () => {
+test('描き手の切断記録後すぐスキップ、他の接続が残っていれば対象外', async () => {
   const { canSkipAbsentDrawer } = await import('../src/room-management.mjs');
   const room={phase:'playing',drawer:'alice',lastDisconnects:{alice:1000}};
-  assert.equal(canSkipAbsentDrawer(room,30999),false);
-  assert.equal(canSkipAbsentDrawer(room,31000),true);
+  assert.equal(canSkipAbsentDrawer(room,999),false);
+  assert.equal(canSkipAbsentDrawer(room,1000),true);
+  assert.equal(canSkipAbsentDrawer({phase:'playing',drawer:'alice'},90000),false);
   assert.equal(canSkipAbsentDrawer({...room,online:{alice:{tab:true}}},90000),false);
   assert.equal(canSkipAbsentDrawer({...room,phase:'lobby'},90000),false);
 });

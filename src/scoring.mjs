@@ -19,7 +19,7 @@ export function scoreDeltas(room, turn, claim) {
 export function scoresForRoom(room, claims, now, omitTurn = null) {
   const scores = Object.fromEntries(Object.entries(room.players || {}).map(([uid, p]) => [uid, p.score || 0]));
   for (const [turn, claim] of Object.entries(claims || {})) {
-    if (String(turn) === String(omitTurn) || !claim?.ended || claim.ended.reason === 'pass' || !resultReady(claim, now)) continue;
+    if (String(turn) === String(omitTurn) || !claim?.ended || claim.ended.reason === 'pass' || (claim.ended.reason !== 'skip' && !resultReady(claim, now)) || !Number.isFinite(claim.ended.at)) continue;
     for (const [uid, points] of Object.entries(scoreDeltas(room, turn, claim))) if (uid in scores) scores[uid] += points;
   }
   return scores;

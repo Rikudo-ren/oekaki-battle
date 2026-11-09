@@ -11,7 +11,7 @@ import { topics } from './topics.mjs';
 import { createHint, hintCharacters } from './hints.mjs';
 import { unlockAudio, playSound, playWhistle, soundEnabled, setSoundEnabled, musicEnabled, setMusicEnabled, setMusicScene } from './audio.mjs';
 import { isOnline, onlinePlayers, isAbandoned, canSkipAbsentDrawer } from './room-management.mjs';
-import { turnStart, countdownRemaining, resultReady, correctEntries, nextSlot, extendSchedule } from './rounds.mjs';
+import { turnStart, countdownRemaining, resultReady, correctEntries, nextSlot, extendSchedule, nextOnlineScheduleIndex } from './rounds.mjs';
 import { END_SCENE_MS, ANSWER_SCENE_MS, RESULT_SCENE_MS, SCORE_SCENE_MS, SCORE_BONUS_MS, SCORE_MOVE_MS, SCORE_SETTLED_MS, GO_SCENE_MS, resultScene, finalSceneVisible, scoreStage, animatedScore } from './presentation.mjs';
 
 const $ = id => document.getElementById(id);
@@ -201,7 +201,7 @@ async function call(name,data){
       current.phase='starting';current.startOrigin='finished';current.extraToken=token;return current;
     });
     if(!locked.committed)throw Error('もう一周を開始できませんでした。');
-    const state=locked.snapshot.val(),base=state.nextTurnIndex,firstIndex=8*(state.rounds+(state.extraRounds||0));
+    const state=locked.snapshot.val(),base=state.nextTurnIndex;
     const plannedOrder=[...(state.order||[]).filter(uid=>state.players?.[uid]),...Object.keys(state.players||{}).filter(uid=>!(state.order||[]).includes(uid)).sort()];
     const words=shuffle(topics).slice(0,8).map((word,i)=>soloMode&&!soloAI&&CPU_IDS.includes(plannedOrder[i])?cpuWord(shuffle):word);
     try{
@@ -214,13 +214,13 @@ async function call(name,data){
         if(!current||current.phase!=='starting'||current.startOrigin!=='finished'||current.extraToken!==token||current.host!==user.uid||current.gameId!==gameId||current.nextTurnIndex!==base)return;
         const players=current.players||{},scheduled=new Set(current.order||[]);
         const order=[...(current.order||[]).filter(uid=>players[uid]),...Object.keys(players).filter(uid=>!scheduled.has(uid)).sort()];
-        if(order.length<2||order.length>8)return;
-        const schedule=[...current.schedule,...order],next=current.schedule.length,ids={...(current.turnIds||{})};
+        if(order.length<2||order.length>8||onlinePlayers(current).length<2)return;
+        const schedule=[...current.schedule,...order],first=current.schedule.length,next=nextOnlineScheduleIndex(current,schedule,first),ids={...(current.turnIds||{})};
         current.lengths=Array.isArray(current.lengths)?current.lengths:Object.assign([],current.lengths);
-        for(let i=0;i<8;i++){ids[(soloMode?next:firstIndex)+i]=base+i;current.lengths[base+i]=Array.from(words[i]).length;}
+        for(let i=0;i<8;i++){ids[first+i]=base+i;current.lengths[base+i]=Array.from(words[i]).length;}
         current.order=order;current.schedule=schedule;current.turnIds=ids;current.extraRounds=(current.extraRounds||0)+1;
         current.scheduleIndex=next;current.turn=ids[next]??next;current.drawer=schedule[next];current.nextTurnIndex=base+8;
-        current.maxCorrect=Math.min(current.correctSetting||7,Object.keys(players).length-1,7);
+        current.maxCorrect=Math.min(current.correctSetting||7,onlinePlayers(current).length-1,7);
         current.phase='playing';current.turnStartedAt=serverTimestamp();delete current.startOrigin;delete current.extraToken;
         return current;
       });
@@ -232,15 +232,15 @@ async function call(name,data){
     return;
   }
   if(name==='nextTurn'){
-    const turn=room.turn, claim=claims[turn]; if(!claim?.ended||!resultReady(claim,Date.now()+serverOffset)||Date.now()+serverOffset<claim.ended.at+RESULT_SCENE_MS||timeoutWordKey!==`${code}:${room.gameId}:${room.matchId}:${turn}`||!timeoutWord)throw Error('結果発表を待ってね。');
+    const turn=room.turn,gameId=room.gameId,matchId=room.matchId, claim=claims[turn],skipped=claim?.ended?.reason==='skip'; if(!claim?.ended||!Number.isFinite(claim.ended.at)||(!skipped&&(!resultReady(claim,Date.now()+serverOffset)||Date.now()+serverOffset<claim.ended.at+RESULT_SCENE_MS||timeoutWordKey!==`${code}:${room.gameId}:${room.matchId}:${turn}`||!timeoutWord)))throw Error('結果発表を待ってね。');
     const result=await transaction(`rooms/${data.code}`,current=>{
-      if(!current||current.host!==user.uid||current.phase!=='playing'||current.turn!==turn)return;
+      if(!current||current.host!==user.uid||current.phase!=='playing'||current.gameId!==gameId||current.matchId!==matchId||current.turn!==turn)return;
       const schedule=extendSchedule(current.schedule,current.players,current.rounds+(current.extraRounds||0));
       current.schedule=schedule;
-      const next=(current.scheduleIndex??turn)+1;if(next>=schedule.length){current.phase='finished';current.finishedAt=serverTimestamp();}
+      const next=nextOnlineScheduleIndex(current,schedule,(current.scheduleIndex??turn)+1);if(next<0||onlinePlayers(current).length<2){current.phase='finished';current.finishedAt=serverTimestamp();}
       else {
         current.scheduleIndex=next;current.turn=current.turnIds?.[next]??next;current.drawer=schedule[next];current.turnStartedAt=serverTimestamp();
-        current.maxCorrect=Math.min(current.correctSetting||7,Object.keys(current.players||{}).length-1,7);
+        current.maxCorrect=Math.min(current.correctSetting||7,onlinePlayers(current).length-1,7);
       }return current;
     });
     if(!result.committed)throw Error('すでに進行しています。');return;
@@ -325,7 +325,7 @@ function enterRoom(roomCode){
   if(timerHandle)clearInterval(timerHandle);timerHandle=setInterval(()=>{updateTimer();maybeTransferHost();maybeSkipAbsentDrawer();maybePruneLobby();maybeAdvancePass();maybeRunSoloBots();},250);
   window.scrollTo(0,0);
 }
-function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;soloAI=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);setAiStatus('');show('room',false);show('home',true);}
+function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing','is-drawing-turn');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;soloAI=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);setAiStatus('');show('room',false);show('home',true);}
 function refreshSoundButton(){const on=soundEnabled(),button=$('sound-toggle');button.setAttribute('aria-pressed',String(on));button.setAttribute('aria-label',on?'効果音をオフにする':'効果音をオンにする');button.querySelector('span').textContent=on?'効果音 ON':'効果音 OFF';}
 $('sound-toggle').onclick=()=>{setSoundEnabled(!soundEnabled());refreshSoundButton();if(soundEnabled())playSound('turn');};
 document.addEventListener('pointerdown',unlockAudio,{passive:true});document.addEventListener('keydown',unlockAudio);
@@ -443,7 +443,7 @@ function renderChat(messages){
    const text=document.createElement('span');text.className='chat-message-text';
    if(message.kind==='correct'&&Number.isInteger(message.turn)&&room){
     const key=`${code}:${room.gameId}:${room.matchId}:${message.turn}`;
-    const messageClaim=claims[message.turn],messageNow=Date.now()+serverOffset;const revealed=resultReady(messageClaim,messageNow)&&resultScene(messageClaim,messageNow)!=='end';
+    const messageClaim=claims[message.turn],messageNow=Date.now()+serverOffset;const revealed=messageClaim?.ended?.reason!=='skip'&&resultReady(messageClaim,messageNow)&&resultScene(messageClaim,messageNow)!=='end';
     const word=revealed?chatRevealedWords[key]:'';
     if(revealed&&!word)fetchChatWord(message.turn);
     text.textContent=word?`正解！ ${word}`:`正解！ ${'●'.repeat(room.lengths?.[message.turn]||3)}`;
@@ -532,7 +532,7 @@ function updateGameSounds(){
   if(soundAnswerKey!==key){soundAnswerKey=key;soundAnswerCount=0;}
   if(count>soundAnswerCount&&!first&&!claim?.ended){playSound('correct');const latest=correctEntries(claim).at(-1),name=room.players?.[latest?.uid]?.name||'だれか';$('correct-notice-name').textContent=`${name}さん 正解！`;$('correct-notice-count').textContent=`${count} / ${room.maxCorrect}人が正解`;show('correct-notice',false);void $('correct-notice').offsetWidth;show('correct-notice',true);clearTimeout(correctNoticeTimer);correctNoticeTimer=setTimeout(()=>show('correct-notice',false),2400);}
   soundAnswerCount=count;
-  if(claim?.ended&&soundResultKey!==key){show('correct-notice',false);clearTimeout(correctNoticeTimer);soundResultKey=key;if(!first&&!resultReady(claim,Date.now()+serverOffset)){if(claim.ended.reason==='pass')playSound('pass');else playWhistle();}}
+  if(claim?.ended&&soundResultKey!==key){show('correct-notice',false);clearTimeout(correctNoticeTimer);soundResultKey=key;if(!first&&claim.ended.reason!=='skip'&&!resultReady(claim,Date.now()+serverOffset)){if(claim.ended.reason==='pass')playSound('pass');else playWhistle();}}
  } else if(room.phase==='finished'&&Number.isFinite(room.finishedAt)){
   const key=`${code}:${room.gameId}:${room.matchId}:${room.finishedAt}`;
   if(soundFinalKey!==key){soundFinalKey=key;if(soundHadRoomState&&Date.now()+serverOffset-room.finishedAt<1200)playSound('correct');}
@@ -563,11 +563,11 @@ function render(){
  }
  lastRenderedPhase=room.phase;
  const host=room.host===user.uid, lobby=room.phase==='lobby'||room.phase==='starting', finished=room.phase==='finished', claim=claims[room.turn], ended=room.phase==='playing'&&!!claim?.ended, revealed=ended&&resultReady(claim,Date.now()+serverOffset), playing=room.phase==='playing'&&!ended, drawer=room.drawer===user.uid, entries=correctEntries(claim);
- const passed=ended&&claim.ended.reason==='pass',now=Date.now()+serverOffset,scene=ended&&!passed?resultScene(claim,now):null,sceneKey=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;presentationKey=ended&&!passed?`${sceneKey}:${scene}`:'';const wordVisible=!lobby&&!finished&&!passed&&Number.isInteger(room.lengths?.[room.turn]);show('word-count',wordVisible);if(wordVisible)$('word-count').textContent=`${room.lengths[room.turn]}文字`;const currentHintKey=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;show('hint-state',playing&&!drawer&&hintKey===currentHintKey);if(hintNoticeKey!==currentHintKey||!playing||drawer)show('hint-notice',false);if(ended&&$('gm-dialog').open)closeGm();const showEnd=ended&&(passed||scene==='end');show('round-end',showEnd);$('round-end').classList.toggle('is-pass',passed);$('round-end-title').textContent=passed?'パス！':'終了！';$('round-end-label').textContent=passed?'NEW TOPIC':'ROUND END';$('round-end-message').textContent=passed?'お題をチェンジ！':({full:'正解枠がすべて埋まりました！',time:'時間切れ！',skip:'出題者が離席しました',whistle:'GMがターンを終了しました'})[claim?.ended?.reason]||'おえかきストップ！';
+ const passed=ended&&claim.ended.reason==='pass',skipped=ended&&claim.ended.reason==='skip',now=Date.now()+serverOffset,scene=ended&&!passed&&!skipped?resultScene(claim,now):null,sceneKey=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;presentationKey=ended&&!passed&&!skipped?`${sceneKey}:${scene}`:'';const wordVisible=!lobby&&!finished&&!passed&&Number.isInteger(room.lengths?.[room.turn]);show('word-count',wordVisible);if(wordVisible)$('word-count').textContent=`${room.lengths[room.turn]}文字`;const currentHintKey=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;show('hint-state',playing&&!drawer&&hintKey===currentHintKey);if(hintNoticeKey!==currentHintKey||!playing||drawer)show('hint-notice',false);if(ended&&$('gm-dialog').open)closeGm();const showEnd=ended&&!skipped&&(passed||scene==='end');show('round-end',showEnd);$('round-end').classList.toggle('is-pass',passed);$('round-end-title').textContent=passed?'パス！':'終了！';$('round-end-label').textContent=passed?'NEW TOPIC':'ROUND END';$('round-end-message').textContent=passed?'お題をチェンジ！':({full:'正解枠がすべて埋まりました！',time:'時間切れ！',skip:'出題者が離席しました',whistle:'GMがターンを終了しました'})[claim?.ended?.reason]||'おえかきストップ！';
  if(showEnd&&endSceneKey!==sceneKey){endSceneKey=sceneKey;$('round-end').style.setProperty('--scene-offset',`${-Math.max(0,now-claim.ended.at)}ms`);}if(!showEnd)endSceneKey='';
- const showAnswer=ended&&!passed&&scene==='answer';show('answer-scene',showAnswer);
+ const showAnswer=ended&&!passed&&!skipped&&scene==='answer';show('answer-scene',showAnswer);
  if(showAnswer){if(answerSceneKey!==sceneKey){answerSceneKey=sceneKey;$('answer-scene').style.setProperty('--scene-offset',`${-Math.max(0,now-claim.ended.at-END_SCENE_MS)}ms`);if(now-claim.ended.at-END_SCENE_MS<800&&claim.ended.reason!=='time')playSound('hint');}$('answer-scene-word').textContent=timeoutWordKey===sceneKey&&timeoutWord?timeoutWord:'確認中…';}else answerSceneKey='';
- const showFinal=finalSceneVisible(room,now);show('final-scene',showFinal);if(showFinal&&finalSceneKey!==`${sceneKey}:${room.finishedAt}`){finalSceneKey=`${sceneKey}:${room.finishedAt}`;$('final-scene').style.setProperty('--scene-offset',`${-Math.max(0,now-room.finishedAt)}ms`);}if(!showFinal)finalSceneKey='';document.body.classList.toggle('screen-lobby',lobby);document.body.classList.toggle('screen-game',!lobby);$('game').classList.toggle('is-ended',ended);$('game').classList.toggle('is-revealed',revealed);setMusicScene(lobby||finished?'room':'play');
+ const showFinal=finalSceneVisible(room,now);show('final-scene',showFinal);if(showFinal&&finalSceneKey!==`${sceneKey}:${room.finishedAt}`){finalSceneKey=`${sceneKey}:${room.finishedAt}`;$('final-scene').style.setProperty('--scene-offset',`${-Math.max(0,now-room.finishedAt)}ms`);}if(!showFinal)finalSceneKey='';document.body.classList.toggle('screen-lobby',lobby);document.body.classList.toggle('screen-game',!lobby);document.body.classList.toggle('is-drawing-turn',playing&&drawer);$('game').classList.toggle('is-ended',ended);$('game').classList.toggle('is-revealed',revealed);setMusicScene(lobby||finished?'room':'play');
  show('lobby',lobby);show('game',!lobby);show('players-panel',lobby);show('start',host&&room.phase==='lobby');show('settings-open',host&&room.phase==='lobby');$('settings-label').textContent=host?'⚙️ ルールをカスタマイズ':'⚙️ ルールはホストが設定します';show('start-hint',lobby&&(!host||room.phase==='starting'));$('start-hint').textContent=room.phase==='starting'?'ゲームを準備しています…':'ホストがゲームを開始するまで待ってね';$('rounds').disabled=!host;$('time-limit').disabled=!host;updateHintSetting();updateGameSounds();
  $('room-title').textContent=lobby?'みんなの部屋':finished?'ゲーム終了！':'おえかきバトル！';
  $('room-subtitle').textContent=soloMode?(soloAI?'AIと1対1で対戦':'ひとりでCPUと対戦'):PUBLIC_ROOMS[code]?PUBLIC_ROOMS[code]:lobby?'友だちを招待しよう！':`合言葉 ${code}`;
@@ -582,9 +582,9 @@ function render(){
  $('turn-label').textContent=finished?'GAME COMPLETE':`${(room.scheduleIndex??room.turn)+1} / ${total} ターン`;$('turn-label').dataset.compact=finished?'終了':`${(room.scheduleIndex??room.turn)+1} / ${total}`;
  $('turn-badge').textContent=finished?'🏆':drawer?'🎨':'💡';
  show('answer-slots',!finished);show('final-controls',finished);show('final-host-actions',finished&&host);show('final-wait',finished&&!host);
- show('tools',playing&&drawer);show('gm-open',host&&!lobby);show('whistle',playing&&host);$('pass-topic').disabled=!playing||!drawer||entries.length>0||turnExpired()||!drawerWord;show('result',!playing);show('next',revealed&&!passed&&host&&Date.now()+serverOffset>=claim.ended.at+RESULT_SCENE_MS&&timeoutWordKey===`${code}:${room.gameId}:${room.matchId}:${room.turn}`&&!!timeoutWord);
+ show('tools',playing&&drawer);show('gm-open',host&&!lobby);show('whistle',playing&&host);$('pass-topic').disabled=!playing||!drawer||entries.length>0||turnExpired()||!drawerWord;show('result',!playing&&!skipped);show('next',revealed&&!passed&&!skipped&&host&&Date.now()+serverOffset>=claim.ended.at+RESULT_SCENE_MS&&timeoutWordKey===`${code}:${room.gameId}:${room.matchId}:${room.turn}`&&!!timeoutWord);
  renderAnswerSlots(sceneKey,entries.length,room.maxCorrect||0);
- const viewing=playing&&!drawer,answered=entries.some(entry=>entry.uid===user.uid),guide=finished||ended||viewing;
+ const viewing=playing&&!drawer,answered=entries.some(entry=>entry.uid===user.uid),guide=finished||(ended&&!skipped)||viewing;
  show('compact-role',playing);$('compact-role').classList.toggle('is-drawing',playing&&drawer);$('compact-role').classList.toggle('is-answered',viewing&&answered);setText('compact-role',drawer?'✎ あなたが描く':answered?'✓ 正解済み':'💡 答える番');show('turn-role',playing);$('turn-role').classList.toggle('is-drawing',playing&&drawer);$('turn-role').classList.toggle('is-answering',viewing);$('turn-role').classList.toggle('is-answered',viewing&&answered);$('game-stage').classList.toggle('is-my-turn',playing&&drawer);setText('turn-role-icon',drawer?'✎':answered?'✓':'💡');setText('turn-role-title',drawer?'あなたが描く番！':answered?'正解！待機中':'あなたは答える番');setText('turn-role-detail',drawer?'お題を絵で伝えよう':answered?'みんなの回答を待とう':'絵を見てひらがなで答えよう');
  show('turn-guide',guide);
  $('turn-guide').classList.toggle('is-finished',finished);$('turn-guide').classList.toggle('is-answered',viewing&&answered);
@@ -595,6 +595,7 @@ function render(){
 
  canvas.setAttribute('aria-label',drawer&&playing?'お絵かきキャンバス：あなたが描く番です':'お絵かきキャンバス：描かれた絵');setText('canvas-placeholder',drawer&&playing?'ここに絵を描こう！ ✎':'ここに絵が描かれるよ ✎');
  if(finished){const max=Math.max(...players.map(([,p])=>p.score||0));const winners=players.filter(([,p])=>(p.score||0)===max).map(([,p])=>p.name).join('、');$('prompt').textContent='おつかれさま！';$('word-tiles').replaceChildren();$('game-hint').textContent='すべてのターンが終わりました。';$('result').textContent=`🏆 ${winners}　${max}ポイント！`;$('final-winners').textContent=winners;$('final-points').textContent=`${max} pt`;}
+ else if(skipped){$('prompt').textContent='次のターンへ';$('game-hint').textContent='準備しています…';$('result').textContent='';$('word-tiles').replaceChildren();}
  else if(passed){$('prompt').textContent='パス！';$('game-hint').textContent='新しいお題を準備しています…';$('result').textContent='新しいお題にチェンジ！';$('word-tiles').replaceChildren();}
  else if(ended){
    const key=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;const reason=claim.ended.reason;
@@ -622,7 +623,7 @@ function render(){
      const events=snap.val()||{};strokes=reduceDrawingEvents(Object.keys(events).sort().map(key=>events[key]));redraw();
    },e=>toast(friendly(e)));
  }
- renderScoreboard(claim,ended&&!passed&&scene==='score');
+ renderScoreboard(claim,ended&&!passed&&!skipped&&scene==='score');
  updateDrawingControls();updateTimer();
 }
 
@@ -723,8 +724,8 @@ function updateTimer(){
   if(go&&countdownKey!==key){countdownKey=key;countdownValue=0;$('countdown-number').textContent='スタート！';$('countdown').style.setProperty('--go-offset',`${-Math.max(0,now-start)}ms`);$('countdown').classList.add('is-go');}
   show('countdown',go);
  }
- if(claim?.ended&&claim.ended.reason!=='pass'&&presentationKey!==`${key}:${resultScene(claim,now)}`){render();return;}
- if(claim?.ended&&claim.ended.reason!=='pass'&&resultScene(claim,now)!=='end'&&resultReady(claim,now)&&(revealKey!==key||(!timeoutWord&&Date.now()>=revealRetryAt&&timeoutWordKey!==key))){if(revealKey!==key&&claim.ended.reason==='time')playSound('timeout');revealKey=key;render();return;}
+ if(claim?.ended&&claim.ended.reason!=='pass'&&claim.ended.reason!=='skip'&&presentationKey!==`${key}:${resultScene(claim,now)}`){render();return;}
+ if(claim?.ended&&claim.ended.reason!=='pass'&&claim.ended.reason!=='skip'&&resultScene(claim,now)!=='end'&&resultReady(claim,now)&&(revealKey!==key||(!timeoutWord&&Date.now()>=revealRetryAt&&timeoutWordKey!==key))){if(revealKey!==key&&claim.ended.reason==='time')playSound('timeout');revealKey=key;render();return;}
  updateDrawingControls();
  if(!room.timeLimit){show('timer',false);show('score-gauge',false);return;}
  const start=turnStart(room),left=remainingMs(start,room.timeLimit,now);
@@ -848,11 +849,21 @@ function maybePruneLobby(){
  }).catch(e=>console.error('離席者の整理を再試行します',e)).finally(()=>{prunePending=false;pruneRetryAt=Date.now()+1000;});
 }
 function maybeSkipAbsentDrawer(){
- if(!room||room.host!==user?.uid||claims[room.turn]?.ended||!canSkipAbsentDrawer(room,Date.now()+serverOffset))return;
- const {turn,gameId}=room,roomCode=code,key=`${roomCode}:${gameId}:${room?.matchId}:${turn}`;
+ if(!room||room.host!==user?.uid||room.phase!=='playing')return;
+ const {turn,gameId}=room,roomCode=code,key=`${roomCode}:${gameId}:${room?.matchId}:${turn}`,claim=claims[turn];
+ if(claim?.ended&&claim.ended.reason!=='skip')return;
+ if(!claim?.ended&&!canSkipAbsentDrawer(room,Date.now()+serverOffset))return;
  if(skipPending===key||Date.now()<skipRetryAt)return;
  skipPending=key;
- call('endTurn',{code:roomCode,turn,gameId,reason:'skip'}).catch(e=>{skipRetryAt=Date.now()+1000;if(!(e.code==='PERMISSION_DENIED'||e.message?.includes('permission_denied')))console.error(e);}).finally(()=>{if(skipPending===key)skipPending='';});
+ // The claim transaction wins or loses against any last-moment correct answer.
+ // A later host can resume from the persisted skip if this tab disconnects.
+ (async()=>{
+  if(!claim?.ended)await call('endTurn',{code:roomCode,turn,gameId,reason:'skip'});
+  if(code!==roomCode||room?.gameId!==gameId||room?.turn!==turn||room?.host!==user?.uid)return;
+  const saved=(await get(ref(db,`claims/${roomCode}/${gameId}/${turn}`))).val();
+  if(saved?.ended?.reason!=='skip')return;
+  claims[turn]=saved;await call('nextTurn',{code:roomCode});
+ })().catch(e=>{skipRetryAt=Date.now()+1000;if(!(e.code==='PERMISSION_DENIED'||e.message?.includes('permission_denied')))console.error(e);}).finally(()=>{if(skipPending===key)skipPending='';});
 }
 function fetchHint(){
  const roomCode=code,gameId=room.gameId,turn=room.turn,key=`${roomCode}:${gameId}:${room?.matchId}:${turn}`;

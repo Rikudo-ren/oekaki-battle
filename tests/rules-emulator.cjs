@@ -171,3 +171,20 @@ test('Realtime Database: GMは参加者が接続中でも退出時に部屋を�
   await assertSucceeds(host.ref('rooms/EXIT01').set(null));
  }finally{await env.cleanup();}
 });
+
+test('Realtime Database: 切断した出題者だけをGMが即時スキップし、確定済み正解を残す',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-skip',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  const started=Date.now()-5000,slot={uid:'alice',at:started+4000,startedAt:started+3000,duration:60};
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/SKIP01').set({host:'host',phase:'playing',gameId:'game',players:{host:{name:'host',score:0},drawer:{name:'drawer',score:0},alice:{name:'alice',score:0}},online:{host:{tab:true},drawer:{one:true,two:true},alice:{tab:true}},lastDisconnects:{drawer:Date.now()-100},drawer:'drawer',turn:0,turnStartedAt:started,timeLimit:60,maxCorrect:2});await c.database().ref('claims/SKIP01/game/0').set({slots:{s0:slot}});});
+  const db=uid=>env.authenticatedContext(uid).database(),claim='claims/SKIP01/game/0',skip=current=>({...current,ended:{reason:'skip',at:timestamp}});
+  await assertFails(db('host').ref(claim).transaction(skip,undefined,false));
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/SKIP01/online/drawer/one').set(null);});
+  await assertFails(db('host').ref(claim).transaction(skip,undefined,false));
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/SKIP01/online/drawer').set(null);await c.database().ref('rooms/SKIP01/lastDisconnects/drawer').set(Date.now());});
+  await assertFails(db('alice').ref(claim).transaction(skip,undefined,false));
+  await assertSucceeds(db('host').ref(claim).transaction(skip,undefined,false));
+  assert.deepEqual((await db('host').ref(claim).get()).val().slots.s0,slot);
+  await assertFails(db('host').ref(claim).transaction(skip,undefined,false));
+ }finally{await env.cleanup();}
+});
