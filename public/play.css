@@ -680,3 +680,14 @@ body.screen-game .game-status #ai-game-status:not(.hidden){display:block;grid-co
 /* Ranking is reserved for the end of the match, not each lap. */
 .final-ranking{background:#fffdf4;border:2px solid #f0d98c;border-radius:18px;padding:12px 16px;margin:10px 0;max-height:35dvh;overflow:auto}
 .final-ranking h2{margin:0 0 8px;color:#286d88;font-size:18px}.final-ranking ol{list-style:none;padding:0;margin:0;display:grid;gap:5px}.final-ranking li{display:flex;justify-content:space-between;gap:12px;background:#fff4cd;border-radius:9px;padding:6px 10px;font-weight:800}.final-ranking li span{min-width:0;overflow-wrap:anywhere}.final-ranking li strong{white-space:nowrap;color:#dc785a}
+
+/* Between laps, let the GM decide without showing the final ranking. */
+body.screen-game .round-choice{flex:none;text-align:center;padding:10px 12px;background:#fff7da;border:2px solid #e9d18b;border-radius:15px;color:#286d88}
+body.screen-game .round-choice strong{display:block;margin-bottom:7px}
+body.screen-game .round-choice p{margin:0;font-size:13px;font-weight:700}
+body.screen-game .round-choice-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+body.screen-game .round-choice-actions button{min-height:38px}
+body.screen-game .is-between-rounds .canvas-wrap{display:none}
+@media(max-width:700px){body.screen-game .round-choice{padding:7px}body.screen-game .round-choice strong{margin-bottom:4px;font-size:13px}body.screen-game .round-choice-actions button{min-height:32px;font-size:12px}}
+body.screen-game .round-choice-actions button{flex:1 1 210px;width:auto;height:auto;margin:0;padding:9px 12px}
+@media(max-width:700px){body.screen-game .round-choice-actions button{flex-basis:120px}}

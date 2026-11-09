@@ -201,3 +201,14 @@ test('Realtime Database: 描画中のチャンクと次の周のお題作成',as
   await assertSucceeds(db('host').ref('secrets/STRM01/game/8').set('ねこ'));await assertFails(db('guest').ref('secrets/STRM01/game/9').set('いぬ'));
  }finally{await env.cleanup();}
 });
+
+test('Realtime Database: 周回後も新規参加でき、進行選択はGMだけ',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-boundary',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/LAP001').set({host:'host',phase:'roundEnd',gameId:'game',players:{host:{name:'host',score:0},guest:{name:'guest',score:0}},online:{host:{tab:true},guest:{tab:true}}});});
+  const db=uid=>env.authenticatedContext(uid).database();
+  await assertSucceeds(db('late').ref('rooms/LAP001/players/late').set({name:'late',score:0}));
+  await assertFails(db('guest').ref('rooms/LAP001').update({phase:'finished',finishedAt:timestamp}));
+  await assertSucceeds(db('host').ref('rooms/LAP001').update({phase:'finished',finishedAt:timestamp}));
+ }finally{await env.cleanup();}
+});
