@@ -15,7 +15,7 @@ function write(p,v){const keys=p.split('/'),stack=[];let o=data;for(const k of k
 function notify(paths){for(const sub of subs)if(sub.active&&paths.some(p=>p===sub.path||p.startsWith(sub.path+'/')||sub.path.startsWith(p+'/')))queueMicrotask(()=>sub.active&&sub.cb({val:()=>clone(getPath(sub.path))}));}
 function apply(p,values){const paths=[];for(const [k,v] of Object.entries(values)){const path=`${p}/${k}`;write(path,v);paths.push(path);}notify(paths);}
 function makeClient(uid,history){const dom=new JSDOM(html,{url:'https://example.test/',runScripts:'outside-only',pretendToBeVisual:true});windows.push(dom.window);const w=dom.window,d=w.document;w.scrollTo=()=>{};w.confirm=()=>true;w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){}});w.HTMLCanvasElement.prototype.setPointerCapture=()=>{};w.FIREBASE_CONFIG={apiKey:'x',databaseURL:'https://example.test',projectId:'x',appId:'x'};
- const whistles=[],painted=[];w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){painted.push(1);}});w.fetch=async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(0)});
+ const whistles=[],painted=[];w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){},beginPath(){},moveTo(){},lineTo(){},fillRect(){},drawImage(){},stroke(){painted.push(1);}});w.HTMLCanvasElement.prototype.toDataURL=()=>"data:image/png;base64,aGVsbG8=";w.fetch=async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(0)});
  w.AudioContext=class {constructor(){this.state='running';this.currentTime=0;this.destination={};}decodeAudioData(){return Promise.resolve({});}createBufferSource(){return {connect(){},disconnect(){},start(){},stop(){}};}createGain(){return {gain:{value:0,setValueAtTime(){},linearRampToValueAtTime(){}},connect(){}};}createOscillator(){return {frequency:{setValueAtTime(){},linearRampToValueAtTime(){}},connect(){},start(){whistles.push(true);},stop(){}};}};
  if(history)w.localStorage.setItem('oekaki-recent-rooms',history);
  connections[uid]={offline:[]};
@@ -53,10 +53,40 @@ async function roomWithTwo(){const host=makeClient('host'),guest=makeClient('gue
  assert.equal(c.d.querySelector('#time-limit').value,'30');assert.match(c.d.querySelector('#room-code-title').textContent,/CPU対戦/);assert.match(c.d.querySelector('#players').textContent,/もも CPU/);assert.deepEqual(data,{});
  c.d.querySelector('#time-limit').value='custom';c.d.querySelector('#custom-time').value='10';c.d.querySelector('#time-limit').dispatchEvent(new c.w.Event('change'));c.d.querySelector('#start').click();await wait(3500);
  assert.match(c.d.querySelector('.game-player.is-drawer').textContent,/CPU/);assert.ok(c.painted.length>0);await sendChat(c,'まちがい');assert.doesNotMatch(c.d.querySelector('#chat-messages').textContent,/正解！/);
- await wait(2500);assert.match(c.d.querySelector('#answer-slots').textContent,/正解 [1-2] \/ 3/);await sendChat(c,'いぬ');await wait(4500);assert.match(c.d.querySelector('#result').textContent,/答えは「いぬ」/);await wait(3000);assert.match(c.d.querySelector('#scoreboard-list').textContent,/ひとり/);assert.deepEqual(data,{});
+ await wait(2500);assert.match(c.d.querySelector('#answer-slots').textContent,/正解 [1-2] \/ 3/);await sendChat(c,'いぬ');await wait(5500);assert.match(c.d.querySelector('#result').textContent,/答えは「いぬ」/);await wait(3000);assert.match(c.d.querySelector('#scoreboard-list').textContent,/ひとり/);assert.deepEqual(data,{});
  c.d.querySelector('#leave').click();await wait();assert.equal(c.d.querySelector('#home').classList.contains('hidden'),false);
  // Switching to a real room after solo restores the Firebase client.
  c.d.querySelector('#create-name').value='人間';c.d.querySelector('#create').click();await wait();assert.ok(data.rooms);c.dom.window.close();data={};subs=[];
+}
+// Optional AI uses the selected provider and model, sees only the canvas,
+// guesses without being told the answer, and generates its own line drawing.
+{
+ const c=makeClient('human');Object.defineProperty(c.w.crypto,'getRandomValues',{value:a=>{a.fill(0);return a;}});let elapsed=0;const now=Date.now;c.w.Date.now=()=>now()+elapsed;c.w.__firebaseMocks.serverTimestamp=()=>({'.sv':'timestamp'});const calls=[];
+ c.w.fetch=async(url,options)=>{if(url==='/api/ai'){const body=JSON.parse(options.body);calls.push(body);if(body.action==='models')return {ok:true,json:async()=>({models:[{id:'gpt-test',label:'GPT Test'}]})};if(body.action==='guess')return {ok:true,json:async()=>({text:calls.filter(x=>x.action==='guess').length===1?'ねこ':'いぬ'})};return {ok:true,json:async()=>({text:JSON.stringify({strokes:[{color:'#393632',width:7,points:[[10,10],[200,200]]},{color:'#ef806d',width:7,points:[[250,100],[500,300]]}]})})};}return {ok:true,arrayBuffer:async()=>new ArrayBuffer(0)};};
+ c.d.querySelector('#quick-name').value='ひとり';c.d.querySelector('#ai-key').value='test-key';c.d.querySelector('#ai-key').dispatchEvent(new c.w.Event('input'));c.d.querySelector('#ai-load-models').click();await wait();assert.ok([...c.d.querySelector('#ai-model').options].some(o=>o.value==='gpt-test'));c.d.querySelector('#ai-model').value='gpt-test';c.d.querySelector('#solo-start').click();await wait(150);assert.match(c.d.querySelector('#players').textContent,/あい AI/);assert.equal(JSON.stringify(c.w.localStorage).includes('test-key'),false);c.d.querySelector('#start').click();await wait(200);
+ elapsed+=4000;await wait(350);elapsed+=8500;await wait(400);assert.match(c.d.querySelector('#chat-messages').textContent,/ねこ/);assert.doesNotMatch(c.d.querySelector('#chat-messages').textContent,/あい AI正解/);
+ elapsed+=8000;await wait(400);const guesses=calls.filter(x=>x.action==='guess');assert.equal(guesses.length,2);assert.ok(guesses.every(x=>x.provider==='openai'&&x.model==='gpt-test'&&x.image.startsWith('data:image/png;base64,')&&!Object.hasOwn(x,'word')));assert.match(c.d.querySelector('#chat-messages').textContent,/あい AI.*正解/);assert.ok(!c.d.querySelector('#chat-messages').textContent.includes('いぬ'));
+ for(let i=0;i<3;i++){c.d.querySelector('#gm-open').click();c.d.querySelector('#whistle').click();await wait(100);elapsed+=13500;await wait(350);c.d.querySelector('#next').click();await wait(150);elapsed+=4000;await wait(350);}
+ await wait(500);assert.match(c.d.querySelector('.game-player.is-drawer').textContent,/あい AI/);assert.equal(calls.filter(x=>x.action==='draw').length,1);assert.equal(calls.find(x=>x.action==='draw').model,'gpt-test');assert.ok(c.painted.length>0);
+ c.d.querySelector('#leave').click();await wait(150);assert.equal(c.d.querySelector('#home').classList.contains('hidden'),false);assert.deepEqual(data,{});c.dom.window.close();data={};subs=[];
+}
+// An unavailable AI is announced and uses the ordinary CPU fallback; a
+// missing model prevents accidentally starting a paid AI session.
+{
+ const c=makeClient('human');Object.defineProperty(c.w.crypto,'getRandomValues',{value:a=>{a.fill(0);return a;}});let elapsed=0;const now=Date.now;c.w.Date.now=()=>now()+elapsed;c.w.__firebaseMocks.serverTimestamp=()=>({'.sv':'timestamp'});let count=0;
+ c.w.fetch=async(url)=>{if(url==='/api/ai'){count++;return {ok:false,json:async()=>({error:'APIキーを確認してください。'})};}return {ok:true,arrayBuffer:async()=>new ArrayBuffer(0)};};
+ c.d.querySelector('#quick-name').value='ひとり';c.d.querySelector('#ai-key').value='invalid-key';c.d.querySelector('#solo-start').click();await wait();assert.match(c.d.querySelector('#toast').textContent,/モデル/);assert.equal(c.d.querySelector('#home').classList.contains('hidden'),false);assert.equal(count,0);
+ c.d.querySelector('#ai-model').value='__custom';c.d.querySelector('#ai-model').dispatchEvent(new c.w.Event('change'));c.d.querySelector('#ai-custom-model').value='test-model';c.d.querySelector('#solo-start').click();await wait(150);c.d.querySelector('#start').click();await wait(200);elapsed+=4000;await wait(350);elapsed+=8500;await wait(800);
+ assert.equal(count,1);assert.match(c.d.querySelector('#toast').textContent,/CPUが代わり/);assert.match(c.d.querySelector('#chat-messages').textContent,/あい AI.*正解/);
+ c.d.querySelector('#leave').click();await wait();c.dom.window.close();data={};subs=[];
+}
+// A delayed AI response after a turn ends cannot submit an answer or points.
+{
+ const c=makeClient('human');Object.defineProperty(c.w.crypto,'getRandomValues',{value:a=>{a.fill(0);return a;}});let elapsed=0,release;const now=Date.now;c.w.Date.now=()=>now()+elapsed;c.w.__firebaseMocks.serverTimestamp=()=>({'.sv':'timestamp'});
+ c.w.fetch=async(url)=>url==='/api/ai'?new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>({text:'いぬ'})});}):({ok:true,arrayBuffer:async()=>new ArrayBuffer(0)});
+ c.d.querySelector('#quick-name').value='ひとり';c.d.querySelector('#ai-key').value='key';c.d.querySelector('#ai-model').value='__custom';c.d.querySelector('#ai-custom-model').value='test-model';c.d.querySelector('#solo-start').click();await wait(150);c.d.querySelector('#start').click();await wait(200);elapsed+=4000;await wait(350);elapsed+=8500;await wait(350);assert.equal(typeof release,'function');
+ c.d.querySelector('#gm-open').click();c.d.querySelector('#whistle').click();await wait(150);release();await wait(350);assert.doesNotMatch(c.d.querySelector('#chat-messages').textContent,/あい AI.*正解/);assert.doesNotMatch(c.d.querySelector('#chat-messages').textContent,/いぬ/);
+ c.d.querySelector('#leave').click();await wait();c.dom.window.close();data={};subs=[];
 }
 // A complete solo lap and an extra lap, including simulated CPU guesses on
 // the human's drawing turn. A virtual clock avoids waiting for animations.
