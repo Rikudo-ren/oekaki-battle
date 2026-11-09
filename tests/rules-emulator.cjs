@@ -188,3 +188,16 @@ test('Realtime Database: 切断した出題者だけをGMが即時スキップ�
   await assertFails(db('host').ref(claim).transaction(skip,undefined,false));
  }finally{await env.cleanup();}
 });
+
+test('Realtime Database: 描画中のチャンクと次の周のお題作成',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-stream',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/STRM01').set({host:'host',phase:'playing',gameId:'game',players:{host:{name:'host',score:0},drawer:{name:'drawer',score:0},guest:{name:'guest',score:0}},drawer:'drawer',turn:0,turnStartedAt:Date.now()-5000,timeLimit:60});});
+  const db=uid=>env.authenticatedContext(uid).database(),path='drawings/STRM01/game/0';
+  const chunk={color:'#393632',width:5,strokeId:'stroke-123',points:'[[0,0],[10,10]]'};
+  await assertSucceeds(db('drawer').ref(`${path}/a`).set(chunk));await assertSucceeds(db('drawer').ref(`${path}/b`).set({...chunk,points:'[[10,10],[20,20]]'}));
+  await assertFails(db('guest').ref(`${path}/c`).set(chunk));await assertFails(db('drawer').ref(`${path}/a`).set(chunk));await assertFails(db('drawer').ref(`${path}/bad`).set({...chunk,strokeId:'x'.repeat(33)}));
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/STRM01').update({phase:'starting',startOrigin:'round'});});
+  await assertSucceeds(db('host').ref('secrets/STRM01/game/8').set('ねこ'));await assertFails(db('guest').ref('secrets/STRM01/game/9').set('いぬ'));
+ }finally{await env.cleanup();}
+});

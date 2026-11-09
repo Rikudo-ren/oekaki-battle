@@ -48,3 +48,12 @@ test('正方形の画面でも以前の900×540座標を使って同期する', 
   assert.equal(logicalToCanvasY(540,900),900);
   assert.equal(logicalToCanvasY(270,540),270);
 });
+
+test('描画途中の複数チャンクは一筆として復元し、まとめてもどせる', async () => {
+  const {reduceDrawingEvents}=await import('../src/drawing.mjs');
+  const a={...stroke([[0,0]]),strokeId:'one'}, b={...stroke([[0,0],[1,1]]),strokeId:'one'}, c={...stroke([[2,2]]),strokeId:'two'};
+  const strokes=reduceDrawingEvents([a,b,c]);
+  assert.equal(strokes.length,2);assert.deepEqual(strokes[0].segments,[a,b]);
+  assert.deepEqual(reduceDrawingEvents([a,b,c,{action:'undo'}]),[{strokeId:'one',segments:[a,b]}]);
+  assert.deepEqual(reduceDrawingEvents([a,b,{action:'undo'},c,{action:'clear'}]),[]);
+});

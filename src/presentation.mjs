@@ -1,8 +1,8 @@
 // Visual pacing is separate from the RTDB's two-second secret-read rule.
 // Every stage is derived from the server timestamp so late arrivals see the
 // current stage instead of restarting an old animation.
-export const END_SCENE_MS = 3200;
-export const ANSWER_SCENE_MS = 2600;
+export const END_SCENE_MS = 2000;
+export const ANSWER_SCENE_MS = 2200;
 export const SCORE_SCENE_MS = 7000;
 // Relative to the scoreboard, not the beginning of the turn-end sequence.
 export const SCORE_BONUS_MS = 900;
@@ -23,7 +23,7 @@ export function animatedScore(before, after, age, reducedMotion = false) {
  const eased=1-(1-t)**3;
  return Math.round(before+(after-before)*eased);
 }
-export const RESULT_SCENE_MS = END_SCENE_MS + ANSWER_SCENE_MS + SCORE_SCENE_MS;
+export const RESULT_SCENE_MS = END_SCENE_MS + ANSWER_SCENE_MS;
 export const FINAL_SCENE_MS = 4500;
 export const GO_SCENE_MS = 600;
 export function resultScene(claim, now) {
@@ -31,7 +31,6 @@ export function resultScene(claim, now) {
  const age = Math.max(0, now - claim.ended.at);
  if (age < END_SCENE_MS) return 'end';
  if (age < END_SCENE_MS + ANSWER_SCENE_MS) return 'answer';
- if (age < RESULT_SCENE_MS) return 'score';
  return 'done';
 }
 export function finalSceneVisible(room, now) {

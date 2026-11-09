@@ -1,13 +1,20 @@
 // Rebuild the visible drawing from the ordered, append-only room event log.
 // Older stroke records have no action field and remain valid.
+// Chunks with the same strokeId form one undoable pen stroke. Legacy events
+// without an ID remain independent, so old drawings can still be replayed.
+export function applyDrawingEvent(strokes, event) {
+  if (!event || typeof event !== 'object') return;
+  if (event.action === 'clear') { strokes.length = 0; return; }
+  if (event.action === 'undo') { strokes.pop(); return; }
+  if (typeof event.points !== 'string' || typeof event.color !== 'string' || typeof event.width !== 'number') return;
+  const last=strokes[strokes.length-1];
+  if (event.strokeId && last?.strokeId === event.strokeId) last.segments.push(event);
+  else if (event.strokeId) strokes.push({strokeId:event.strokeId, segments:[event]});
+  else strokes.push(event);
+}
 export function reduceDrawingEvents(events) {
-  let strokes = [];
-  for (const event of events) {
-    if (!event || typeof event !== 'object') continue;
-    if (event.action === 'clear') strokes = [];
-    else if (event.action === 'undo') strokes.pop();
-    else if (typeof event.points === 'string' && typeof event.color === 'string' && typeof event.width === 'number') strokes.push(event);
-  }
+  const strokes=[];
+  for (const event of events) applyDrawingEvent(strokes,event);
   return strokes;
 }
 
