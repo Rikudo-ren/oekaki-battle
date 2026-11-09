@@ -24,6 +24,9 @@ test('Realtime Database: 非公開のお題、複数正解の競合と結果発�
     await assertFails(db('alice').ref(secret).get());
     await assertSucceeds(db('drawer').ref(secret).get());
     const guard=uid=>`chatGuard/ABC123/game/0/${uid}`;
+    await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/ABC123/turnStartedAt').set(Date.now()-1000);});
+    await assertSucceeds(db('bob').ref(guard('bob')).set(true));
+    await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/ABC123/turnStartedAt').set(started);});
     await assertSucceeds(db('alice').ref(guard('alice')).set(true));
     await assertFails(db('alice').ref(guard('bob')).set(true));
     await assertFails(db('alice').ref(guard('alice')).set('yes'));
@@ -33,6 +36,9 @@ test('Realtime Database: 非公開のお題、複数正解の競合と結果発�
     await assertFails(db('alice').ref(`${chat}/rawAnswer`).set(message('alice','さくら')));
     await assertSucceeds(db('drawer').ref(`${chat}/conversation`).set(message('drawer','がんばって')));
     await assertSucceeds(db('alice').ref(`${chat}/wrong`).set(message('alice','すいか')));
+    await assertSucceeds(db('alice').ref(`${chat}/fastWrong`).set(message('alice','いぬ',{turn:0})));
+    await assertFails(db('alice').ref(`${chat}/fastSecret`).set(message('alice','さくら',{turn:0})));
+    await assertFails(db('alice').ref(`${chat}/staleTurn`).set(message('alice','いぬ',{turn:1})));
     await assertFails(db('alice').ref(`${chat}/forged`).set(message('alice','●●●',{kind:'correct',turn:0})));
     await assertFails(db('alice').ref(`${chat}/extra`).set(message('alice','こんにちは',{secret:'さくら'})));
 
@@ -59,6 +65,7 @@ test('Realtime Database: 非公開のお題、複数正解の競合と結果発�
     await assertFails(db('bob').ref(guard('bob')).set(true));
     await assertFails(db('alice').ref(secret).get());
     await assertFails(db('alice').ref(`${chat}/earlyReveal`).set(message('alice','さくら')));
+    await assertFails(db('alice').ref(`${chat}/lateTurn`).set(message('alice','いぬ',{turn:0})));
     await new Promise(resolve=>setTimeout(resolve,2200));
     assert.equal((await assertSucceeds(db('alice').ref(secret).get())).val(),'さくら');
     await assertSucceeds(db('alice').ref(`${chat}/afterReveal`).set(message('alice','さくら')));
@@ -196,6 +203,9 @@ test('Realtime Database: 描画中のチャンクと次の周のお題作成',as
   const db=uid=>env.authenticatedContext(uid).database(),path='drawings/STRM01/game/0';
   const chunk={color:'#393632',width:5,strokeId:'stroke-123',points:'[[0,0],[10,10]]'};
   await assertSucceeds(db('drawer').ref(`${path}/a`).set(chunk));await assertSucceeds(db('drawer').ref(`${path}/b`).set({...chunk,points:'[[10,10],[20,20]]'}));
+  await assertSucceeds(db('drawer').ref(`${path}/erase`).set({...chunk,color:'#ffffff',width:100}));
+  await assertFails(db('drawer').ref(`${path}/tooWide`).set({...chunk,color:'#ffffff',width:101}));
+  await assertFails(db('drawer').ref(`${path}/widePen`).set({...chunk,width:31}));
   await assertFails(db('guest').ref(`${path}/c`).set(chunk));await assertFails(db('drawer').ref(`${path}/a`).set(chunk));await assertFails(db('drawer').ref(`${path}/bad`).set({...chunk,strokeId:'x'.repeat(33)}));
   await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/STRM01').update({phase:'starting',startOrigin:'round'});});
   await assertSucceeds(db('host').ref('secrets/STRM01/game/8').set('ねこ'));await assertFails(db('guest').ref('secrets/STRM01/game/9').set('いぬ'));

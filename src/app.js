@@ -15,11 +15,12 @@ import { turnStart, countdownRemaining, resultReady, correctEntries, nextSlot, e
 import { END_SCENE_MS, ANSWER_SCENE_MS, RESULT_SCENE_MS, SCORE_SCENE_MS, SCORE_BONUS_MS, SCORE_MOVE_MS, SCORE_SETTLED_MS, GO_SCENE_MS, resultScene, finalSceneVisible, scoreStage, animatedScore } from './presentation.mjs';
 
 const $ = id => document.getElementById(id);
+let penSize=5, eraserSize=24, eraserSelected=false;
 let drawingKeys=[], strokeId='', strokeColor='', strokeWidth=0, strokeTimer=null, strokeDirty=false, advancePending='', advanceRetryAt=0, roundPending='', roundRetryAt=0;
 let app, auth, db, user, code, room, claims={}, unsubscribe, unsubscribeClaims, unsubscribeDrawing, unsubscribeChat, activeTurn, wordKey, drawerWord='', color='#393632', drawing=false, points=[], strokes=[], pendingDraws=0, serverOffset=0, timeoutPending='', timeoutWord='', timeoutWordKey='', timerHandle=null, hintKey='', hintValue=null, hintPending='', hintRetryAt=0, soundTurnKey='', soundResultKey='', soundHadRoomState=false;
 let presenceSession=null, hostElectionPending=false, hostElectionRetryAt=0, skipPending='', skipRetryAt=0, prunePending=false, pruneRetryAt=0;
 let countdownKey='', countdownValue=0, revealKey='', revealRetryAt=0, soundAnswerKey='', soundAnswerCount=0;
-let chatMessages={}, chatRevealedWords={}, chatWordPending={}, chatSending=false, chatGuardKey='', claimsInitialized=false, leavingRoom='';
+let chatTurnKey='', chatMessages={}, chatRevealedWords={}, chatWordPending={}, chatSending=false, chatGuardKey='', chatGuardPending=null, chatGuardRetryAt=0, pendingChats={}, claimsInitialized=false, leavingRoom='';
 let passAdvancePending='', passRetryAt=0, lastRenderedPhase='', subscribedGameId='', scoreboardKey='', hintNoticeKey='', hintNoticeTimer=null;
 let presentationKey='', endSceneKey='', answerSceneKey='', finalSceneKey='', correctNoticeTimer=null, soundFinalKey='';
 let scoreboardAnimation=null, scoreboardFrame=null, answerSlotKey='';
@@ -152,9 +153,9 @@ async function call(name,data){
     if(duration>0&&remainingMs(startedAt,duration,Date.now()+serverOffset)===0)throw Error('時間切れです。結果を待ってね。');
     const verifiedPath=`verified/${data.code}/${gameId}/${turn}/${user.uid}`;
     try {
-      const prior=(await get(ref(db,verifiedPath))).val();
+      if(!data.alreadyVerified){const prior=(await get(ref(db,verifiedPath))).val();
       if(prior&&prior!==answer)return {correct:false,verified:false};
-      if(!prior)await set(ref(db,verifiedPath),answer);
+      if(!prior)await set(ref(db,verifiedPath),answer);}
     }catch(e){if(e.code==='PERMISSION_DENIED'||e.message?.includes('permission_denied'))return {correct:false};throw e;}
     const result=await transaction(`claims/${data.code}/${gameId}/${turn}`,current=>{
       current=current||{};if(current.ended||correctEntries(current).some(entry=>entry.uid===user.uid))return;
@@ -331,12 +332,12 @@ function enterRoom(roomCode){
   if(unsubscribe) unsubscribe();
   unsubscribe=onValue(ref(db,`rooms/${code}`), snap=>{room=snap.val();if(!room){if(leavingRoom===roomCode)return;toast('部屋が終了しました。');goHome();return;}if(room.phase==='closing'){if(leavingRoom===roomCode)return;toast('GMが退出したため、部屋が終了しました。');goHome();return;}maybeTransferHost();if(subscribedGameId!==room.gameId){
    if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();if(unsubscribeDrawing)unsubscribeDrawing();
-   unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;activeTurn=undefined;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';subscribedGameId=room.gameId;
+   unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;activeTurn=undefined;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';chatGuardPending=null;pendingChats={};subscribedGameId=room.gameId;
   }if(!unsubscribeClaims){unsubscribeClaims=onValue(ref(db,`claims/${code}/${room.gameId}`),snap=>{const first=!claimsInitialized;claimsInitialized=true;claims=snap.val()||{};if(first&&room?.phase==='playing'){const key=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;answerSlotKey='';soundAnswerKey=key;soundAnswerCount=correctEntries(claims[room.turn]).length;if(claims[room.turn]?.ended)soundResultKey=key;}if(room)render();},e=>toast(friendly(e)));}if(!unsubscribeChat){unsubscribeChat=onValue(query(ref(db,`chats/${code}/${room.gameId}`),limitToLast(100)),snap=>{chatMessages=snap.val()||{};renderChat(chatMessages);},e=>toast(friendly(e)));}render();}, e=>toast(friendly(e)));
-  if(timerHandle)clearInterval(timerHandle);timerHandle=setInterval(()=>{updateTimer();maybeTransferHost();maybeSkipAbsentDrawer();maybePruneLobby();maybeAdvancePass();maybeAdvanceResult();maybeContinueRound();maybeRunSoloBots();},250);
+  if(timerHandle)clearInterval(timerHandle);timerHandle=setInterval(()=>{updateTimer();maybeTransferHost();maybeSkipAbsentDrawer();maybePruneLobby();maybeAdvancePass();maybeAdvanceResult();maybeContinueRound();maybePrimeChatGuard();maybeRunSoloBots();},250);
   window.scrollTo(0,0);
 }
-function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing','is-drawing-turn');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;roundPending='';roundRetryAt=0;advancePending='';advanceRetryAt=0;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;clearInterval(strokeTimer);points=[];activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;soloAI=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);setAiStatus('');show('room',false);show('home',true);}
+function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing','is-drawing-turn');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;roundPending='';roundRetryAt=0;advancePending='';advanceRetryAt=0;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatTurnKey='';$('chat-input').value='';chatSending=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';chatGuardPending=null;chatGuardRetryAt=0;pendingChats={};passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;clearInterval(strokeTimer);points=[];activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;soloAI=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);setAiStatus('');show('room',false);show('home',true);}
 function refreshSoundButton(){const on=soundEnabled(),button=$('sound-toggle');button.setAttribute('aria-pressed',String(on));button.setAttribute('aria-label',on?'効果音をオフにする':'効果音をオンにする');button.querySelector('span').textContent=on?'効果音 ON':'効果音 OFF';}
 $('sound-toggle').onclick=()=>{setSoundEnabled(!soundEnabled());refreshSoundButton();if(soundEnabled())playSound('turn');};
 document.addEventListener('pointerdown',unlockAudio,{passive:true});document.addEventListener('keydown',unlockAudio);
@@ -434,7 +435,7 @@ $('round-continue').onclick=()=>action($('round-continue'),async()=>{
 });
 $('round-finish').onclick=()=>action($('round-finish'),async()=>{await call('finishMatch',{code});});
 $('force-end').onclick=()=>action($('force-end'),async()=>{if(!confirm('試合を強制終了して設定に戻りますか？ 進行中のお題は破棄されますが、確定済みの得点と参加者は残ります。'))return;await call('forceEnd',{code});closeGm();});
-$('pass-topic').onclick=()=>action($('pass-topic'),async()=>{if(!confirm('このお題をパスして、新しいお題にしますか？'))return;await call('passTopic',{code});});
+$('pass-topic').onclick=()=>action($('pass-topic'),async()=>{await call('passTopic',{code});});
 
 // Correct guesses are stored as a marker, never as the secret itself. The
 // answer is retrieved only after the server-timed reveal, even after rejoining.
@@ -449,7 +450,7 @@ function fetchChatWord(turn){
 }
 function renderChat(messages){
  const list=$('chat-messages'), wasAtBottom=list.scrollHeight-list.scrollTop-list.clientHeight<40;
- const entries=Object.entries(messages||{}).sort(([a],[b])=>a<b?-1:a>b?1:0);
+ const entries=Object.entries({...messages,...pendingChats}).sort(([a],[b])=>a<b?-1:a>b?1:0);
  if(!entries.length){const empty=document.createElement('p');empty.className='chat-empty';empty.append('まだメッセージはありません。',document.createElement('br'),'最初のひとことを送ってみよう！');list.replaceChildren(empty);return;}
  list.replaceChildren(...entries.map(([,message])=>{
    const row=document.createElement('div');row.className='chat-message'+(message.uid===user?.uid?' mine':'')+(message.kind==='correct'?' is-correct':'');
@@ -499,40 +500,78 @@ document.addEventListener('keydown',e=>{
  input.setRangeText(e.key,start,end,'end');
  input.dispatchEvent(new Event('input',{bubbles:true}));
 });
-$('chat-form').onsubmit=e=>{e.preventDefault();if(chatSending)return;chatSending=true;action(e.submitter || e.currentTarget.querySelector('button[type=submit]'),async()=>{
- const input=$('chat-input'),text=input.value.trim();if(!text)return;
+// The capability check runs during the countdown, so the first message does
+// not have to wait for an extra server round-trip. Always fail closed if the
+// required rules are missing; an old ruleset must not receive raw answers.
+function ensureChatGuard(roomCode,gameId,matchId,turn,uid,currentDb){
+ const key=`${roomCode}:${gameId}:${matchId}:${turn}:${uid}`;
+ if(chatGuardKey===key)return Promise.resolve();
+ if(chatGuardPending?.key===key)return chatGuardPending.promise;
+ const promise=set(ref(currentDb,`chatGuard/${roomCode}/${gameId}/${turn}/${uid}`),true).then(()=>{
+  if(db===currentDb&&code===roomCode&&room?.gameId===gameId&&room?.matchId===matchId&&room?.turn===turn)chatGuardKey=key;
+ }).finally(()=>{if(chatGuardPending?.key===key)chatGuardPending=null;});
+ chatGuardPending={key,promise};return promise;
+}
+function maybePrimeChatGuard(){
+ if(!room||room.phase!=='playing'||claims[room.turn]?.ended||!user||!room.players?.[user.uid]||Date.now()<chatGuardRetryAt)return;
+ const {gameId,matchId,turn}=room,roomCode=code,currentDb=db,uid=user.uid,key=`${roomCode}:${gameId}:${matchId}:${turn}:${uid}`;
+ if(chatGuardKey===key||chatGuardPending?.key===key)return;
+ ensureChatGuard(roomCode,gameId,matchId,turn,uid,currentDb).catch(()=>{chatGuardRetryAt=Date.now()+1000;});
+}
+// Send the safe, turn-bound candidate and answer verification concurrently.
+// The server accepts an ordinary message only when it is not the answer. The
+// sender sees a neutral pending bubble until acceptance, never a raw answer.
+async function sendFastGuess({roomCode,gameId,matchId,turn,text,message,currentDb,uid}){
+ const chatRef=push(ref(currentDb,`chats/${roomCode}/${gameId}`)),key=chatRef.key||String(chatRef.path||chatRef).split('/').pop();
+ const pending={...message,text:'送信中…',at:Date.now()};pendingChats[key]=pending;renderChat(chatMessages);
+ const verifyPath=`verified/${roomCode}/${gameId}/${turn}/${uid}`;
+ const verification=set(ref(currentDb,verifyPath),text).then(()=>true,()=>false);
+ try{
+  try{await set(chatRef,message);return;}
+  catch(error){
+   if(!(error.code==='PERMISSION_DENIED'||error.message?.toLowerCase().includes('permission_denied')))throw error;
+   let verified=await verification;
+   // An earlier correct guess (possibly from another tab) is immutable.
+   if(!verified)verified=(await get(ref(currentDb,verifyPath))).val()===text;
+   if(!verified)throw error;
+   if(db!==currentDb||code!==roomCode||room?.gameId!==gameId||room?.matchId!==matchId||room?.turn!==turn||room.phase!=='playing')throw Error('ターンが切り替わりました。もう一度送ってね。');
+   const result=await call('submitAnswer',{code:roomCode,answer:text,alreadyVerified:true});
+   if(!result.correct)throw Error('ターンが終了しました。');
+   await set(chatRef,{...message,text:'●●●',kind:'correct'});
+   toast('正解！発表まで答えは伏字になります。');
+  }
+ }finally{if(pendingChats[key]===pending)delete pendingChats[key];if(db===currentDb&&code===roomCode&&room?.gameId===gameId)renderChat(chatMessages);}
+}
+$('chat-form').onsubmit=e=>{e.preventDefault();if(chatSending)return;const sendToken={};chatSending=sendToken;action(e.submitter || e.currentTarget.querySelector('button[type=submit]'),async()=>{
+ const input=$('chat-input'),text=input.value.trim(),draftTurnKey=chatTurnKey;if(!text)return;
  if(!room?.players?.[user.uid])throw Error('部屋に参加していません。');
- const roomCode=code,gameId=room.gameId,turn=room.turn,claim=claims[turn],now=Date.now()+serverOffset;
+ const roomCode=code,gameId=room.gameId,matchId=room.matchId,turn=room.turn,claim=claims[turn],now=Date.now()+serverOffset,currentDb=db,uid=user.uid;
  const playing=room.phase==='playing'&&!claim?.ended;
  if(input.disabled || (room.phase==='playing'&&claim?.ended&&(claim.ended.reason==='pass'||resultScene(claim,now)==='end')))throw Error('発表まで待ってね。');
  let message={uid:user.uid,name:room.players[user.uid].name,text,at:serverTimestamp()};
  if(playing){
   if((countdownRemaining(room,now)??0)>0||turnExpired())throw Error('開始または結果発表まで待ってね。');
-  // Fail closed against an older Firebase ruleset: without this per-turn
-  // capability check, a denied answer verification could be mistaken for a
-  // wrong guess and the raw correct answer could leak into an unguarded chat.
-  const guardKey=`${roomCode}:${gameId}:${room?.matchId}:${turn}:${user.uid}`;
-  if(chatGuardKey!==guardKey){
-   try{await set(ref(db,`chatGuard/${roomCode}/${gameId}/${turn}/${user.uid}`),true);chatGuardKey=guardKey;}
-   catch(e){if(e.code==='PERMISSION_DENIED'||e.message?.includes('permission_denied'))throw Error('安全なチャットに必要なFirebaseルールを確認できません。');throw e;}
-  }
-  if(code!==roomCode||room?.gameId!==gameId||room.phase!=='playing'||room.turn!==turn||claims[turn]?.ended||turnExpired())throw Error('ターンが切り替わりました。もう一度送ってね。');
+  try{await ensureChatGuard(roomCode,gameId,matchId,turn,uid,currentDb);}
+  catch(e){if(e.code==='PERMISSION_DENIED'||e.message?.toLowerCase().includes('permission_denied'))throw Error('安全なチャットに必要なFirebaseルールを確認できません。');throw e;}
+  if(db!==currentDb||user?.uid!==uid||code!==roomCode||room?.gameId!==gameId||room?.matchId!==matchId||room.phase!=='playing'||room.turn!==turn||claims[turn]?.ended||turnExpired())throw Error('ターンが切り替わりました。もう一度送ってね。');
   const normalized=text.normalize('NFKC');
   if(room.drawer===user.uid){
    const key=`${roomCode}:${gameId}:${room?.matchId}:${turn}`;
    if(wordKey!==key||!drawerWord)throw Error('お題を確認中です。少し待ってね。');
    if(normalized===drawerWord)throw Error('描く人はお題をチャットに送れません。');
   }else if(/^[\u3041-\u3096ー]+$/.test(normalized)){
+   if(!soloMode){await sendFastGuess({roomCode,gameId,matchId,turn,text:normalized,message:{...message,text:normalized,turn},currentDb,uid});if(db===currentDb&&code===roomCode&&room?.gameId===gameId&&chatTurnKey===draftTurnKey&&input.value.trim()===text)input.value='';return;}
    const result=await call('submitAnswer',{code:roomCode,answer:normalized});
    if(result.verified){if(!result.correct)throw Error('ターンが終了しました。');message={...message,text:'●●●',kind:'correct',turn};toast('正解！発表まで答えは伏字になります。');}
    else if(result.ended)throw Error('ターンが終了しました。');
   }
  }
+ if(playing&&!soloMode)message={...message,turn};
  // Do not publish a stale guess into a later turn during an asynchronous check.
  if(code!==roomCode||room?.gameId!==gameId||(playing&&(room.phase!=='playing'||room.turn!==turn)))throw Error('ターンが切り替わりました。もう一度送ってね。');
  await set(push(ref(db,`chats/${roomCode}/${gameId}`)),message);
- if(input.value.trim()===text)input.value='';$('chat-messages').scrollTop=$('chat-messages').scrollHeight;
-}).finally(()=>{chatSending=false;updateChatControls();});};
+ if(db===currentDb&&code===roomCode&&room?.gameId===gameId&&chatTurnKey===draftTurnKey&&input.value.trim()===text)input.value='';$('chat-messages').scrollTop=$('chat-messages').scrollHeight;
+}).finally(()=>{if(chatSending===sendToken)chatSending=false;updateChatControls();});};
 function renderTiles(length,word,hint){
  const tiles=$('word-tiles'),chars=word?Array.from(word):hintCharacters(length,hint);
  const label=word?`お題 ${word}`:`お題 ${length}文字${hint?'、ヒント '+chars.map(c=>c||'空欄').join('、'):''}`;
@@ -545,13 +584,20 @@ function updateGameSounds(){
   const key=`${code}:${room.gameId}:${room.matchId}:${room.turn}`,claim=claims[room.turn],first=!soundHadRoomState;
   if(soundTurnKey!==key)soundTurnKey=key;
   const count=correctEntries(claim).length;
-  if(soundAnswerKey!==key){soundAnswerKey=key;soundAnswerCount=0;}
-  if(count>soundAnswerCount&&!first&&!claim?.ended){playSound('correct');const latest=correctEntries(claim).at(-1),name=room.players?.[latest?.uid]?.name||'だれか';$('correct-notice-name').textContent=`${name}さん 正解！`;$('correct-notice-count').textContent=`${count} / ${room.maxCorrect}人が正解`;show('correct-notice',false);void $('correct-notice').offsetWidth;show('correct-notice',true);clearTimeout(correctNoticeTimer);correctNoticeTimer=setTimeout(()=>show('correct-notice',false),2400);}
+  if(soundAnswerKey!==key){soundAnswerKey=key;soundAnswerCount=0;show('correct-notice',false);clearTimeout(correctNoticeTimer);}
+  if(count>soundAnswerCount&&!first&&!claim?.ended){
+   playSound('correct');const names=correctEntries(claim).map(entry=>`${room.players?.[entry.uid]?.name||'だれか'}さん`);
+   $('correct-notice-name').textContent=`${names.join('、')} 正解！`;$('correct-notice-count').textContent=`${count} / ${room.maxCorrect}人が正解`;
+   show('correct-notice',false);void $('correct-notice').offsetWidth;show('correct-notice',true);clearTimeout(correctNoticeTimer);correctNoticeTimer=setTimeout(()=>show('correct-notice',false),3200);
+  }
   soundAnswerCount=count;
   if(claim?.ended&&soundResultKey!==key){show('correct-notice',false);clearTimeout(correctNoticeTimer);soundResultKey=key;if(!first&&claim.ended.reason!=='skip'&&!resultReady(claim,Date.now()+serverOffset)){if(claim.ended.reason==='pass')playSound('pass');else playWhistle();}}
- } else if(room.phase==='finished'&&Number.isFinite(room.finishedAt)){
+ } else {
+  show('correct-notice',false);clearTimeout(correctNoticeTimer);
+  if(room.phase==='finished'&&Number.isFinite(room.finishedAt)){
   const key=`${code}:${room.gameId}:${room.matchId}:${room.finishedAt}`;
-  if(soundFinalKey!==key){soundFinalKey=key;if(soundHadRoomState&&Date.now()+serverOffset-room.finishedAt<1200)playSound('correct');}
+   if(soundFinalKey!==key){soundFinalKey=key;if(soundHadRoomState&&Date.now()+serverOffset-room.finishedAt<1200)playSound('correct');}
+  }
  }
  soundHadRoomState=true;
 }
@@ -578,8 +624,13 @@ function render(){
   if(unsubscribeDrawing)unsubscribeDrawing();unsubscribeDrawing=null;activeTurn=undefined;wordKey=undefined;drawerWord='';hintKey='';hintValue=null;hintPending='';timeoutWord='';timeoutWordKey='';revealKey='';countdownKey='';chatRevealedWords={};chatWordPending={};chatGuardKey='';soundTurnKey='';soundResultKey='';soundAnswerKey='';soundAnswerCount=0;soundHadRoomState=false;closeGm();
  }
  lastRenderedPhase=room.phase;
+ if(room.phase==='playing'&&room.matchId&&Number.isInteger(room.turn)){
+  const key=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;
+  if(chatTurnKey!==key){chatTurnKey=key;$('chat-input').value='';chatSending=false;}
+ }
  const host=room.host===user.uid, lobby=room.phase==='lobby'||(room.phase==='starting'&&room.startOrigin!=='round'), finished=room.phase==='finished', between=room.phase==='roundEnd'||(room.phase==='starting'&&room.startOrigin==='round'), claim=claims[room.turn], ended=room.phase==='playing'&&!!claim?.ended, revealed=ended&&resultReady(claim,Date.now()+serverOffset), playing=room.phase==='playing'&&!ended, drawer=room.drawer===user.uid, entries=correctEntries(claim);
  const passed=ended&&claim.ended.reason==='pass',skipped=ended&&claim.ended.reason==='skip',now=Date.now()+serverOffset,scene=ended&&!passed&&!skipped?resultScene(claim,now):null,sceneKey=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;presentationKey=ended&&!passed&&!skipped?`${sceneKey}:${scene}`:'';const wordVisible=!lobby&&!finished&&!between&&!passed&&Number.isInteger(room.lengths?.[room.turn]);show('word-count',wordVisible);if(wordVisible)$('word-count').textContent=`${room.lengths[room.turn]}文字`;const currentHintKey=`${code}:${room.gameId}:${room.matchId}:${room.turn}`;show('hint-state',playing&&!drawer&&hintKey===currentHintKey);if(hintNoticeKey!==currentHintKey||!playing||drawer)show('hint-notice',false);const showEnd=ended&&!skipped&&(passed||scene==='end');show('round-end',showEnd);$('round-end').classList.toggle('is-pass',passed);$('round-end-title').textContent=passed?'パス！':'終了！';$('round-end-label').textContent=passed?'NEW TOPIC':'ROUND END';$('round-end-message').textContent=passed?'お題をチェンジ！':({full:'正解枠がすべて埋まりました！',time:'時間切れ！',skip:'出題者が離席しました',whistle:'GMがターンを終了しました'})[claim?.ended?.reason]||'おえかきストップ！';
+ if(showEnd&&!passed&&(room.maxCorrect||0)>1&&entries.length){const reason=claim.ended.reason==='full'?'':`${$('round-end-message').textContent} `;$('round-end-message').textContent=`${reason}${entries.map(entry=>`${room.players?.[entry.uid]?.name||'だれか'}さん`).join('、')} 正解！`;}
  if(showEnd&&endSceneKey!==sceneKey){endSceneKey=sceneKey;$('round-end').style.setProperty('--scene-offset',`${-Math.max(0,now-claim.ended.at)}ms`);}if(!showEnd)endSceneKey='';
  const showAnswer=ended&&!passed&&!skipped&&scene==='answer';show('answer-scene',showAnswer);
  if(showAnswer){if(answerSceneKey!==sceneKey){answerSceneKey=sceneKey;$('answer-scene').style.setProperty('--scene-offset',`${-Math.max(0,now-claim.ended.at-END_SCENE_MS)}ms`);if(now-claim.ended.at-END_SCENE_MS<800&&claim.ended.reason!=='time')playSound('hint');}$('answer-scene-word').textContent=timeoutWordKey===sceneKey&&timeoutWord?timeoutWord:'確認中…';}else answerSceneKey='';
@@ -929,11 +980,15 @@ function flushStroke(){
  const chunk=points;points=[chunk[chunk.length-1]];strokeDirty=false;
  sendDrawingEvent({color:strokeColor,width:strokeWidth,strokeId,points:JSON.stringify(chunk)}).catch(()=>redraw());
 }
-canvas.addEventListener('pointerdown',e=>{if(!room||room.phase!=='playing'||claims[room.turn]?.ended||turnExpired()||room.drawer!==user.uid)return;e.preventDefault();drawing=true;strokeId=randomId(20);strokeColor=color;strokeWidth=Number($('brush-size').value);points=[pos(e)];strokeDirty=true;canvas.setPointerCapture(e.pointerId);show('canvas-placeholder',false);paint({color:strokeColor,width:strokeWidth,points:JSON.stringify(points)});flushStroke();clearInterval(strokeTimer);strokeTimer=setInterval(flushStroke,100);updateDrawingControls();});
+canvas.addEventListener('pointerdown',e=>{if(!room||room.phase!=='playing'||claims[room.turn]?.ended||turnExpired()||room.drawer!==user.uid)return;e.preventDefault();drawing=true;strokeId=randomId(20);strokeColor=color;strokeWidth=eraserSelected?eraserSize:penSize;points=[pos(e)];strokeDirty=true;canvas.setPointerCapture(e.pointerId);show('canvas-placeholder',false);paint({color:strokeColor,width:strokeWidth,points:JSON.stringify(points)});flushStroke();clearInterval(strokeTimer);strokeTimer=setInterval(flushStroke,100);updateDrawingControls();});
 canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const p=pos(e),previous=points[points.length-1];if(p[0]===previous[0]&&p[1]===previous[1])return;points.push(p);strokeDirty=true;if(points.length>400)points=points.filter((_,i)=>i%2===0||i===points.length-1);paint({color:strokeColor,width:strokeWidth,points:JSON.stringify([previous,p])});});
 function finishStroke(){if(!drawing)return;clearInterval(strokeTimer);flushStroke();drawing=false;points=[];strokeDirty=false;updateDrawingControls();}
 canvas.addEventListener('pointerup',finishStroke);canvas.addEventListener('pointercancel',finishStroke);
 $('undo').onclick=()=>{if(!room||!strokes.length)return;sendDrawingEvent({action:'undo'}).catch(()=>{});};
 $('clear').onclick=()=>{if(!room||!strokes.length||!confirm('絵を全部消しますか？'))return;sendDrawingEvent({action:'clear'}).catch(()=>{});};
-$('colors').onclick=e=>{const button=e.target.closest('button');if(!button)return;color=button.dataset.color;document.querySelectorAll('#colors button').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',String(b===button));});};
+$('brush-size').addEventListener('input',e=>{penSize=Number(e.target.value);$('brush-value').textContent=e.target.value;});
+$('eraser-size').addEventListener('input',e=>{eraserSize=Number(e.target.value);$('eraser-value').textContent=e.target.value;});
+const sizeMenus=[$('pen-size-menu'),$('eraser-size-menu')];
+for(const menu of sizeMenus)menu.addEventListener('toggle',()=>{if(menu.open)for(const other of sizeMenus)if(other!==menu)other.open=false;});
+$('colors').onclick=e=>{const button=e.target.closest('button');if(!button)return;color=button.dataset.color;eraserSelected=button.dataset.tool==='eraser';document.querySelectorAll('#colors button').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',String(b===button));});};
 $('colors').querySelectorAll('button').forEach((button,i)=>{button.classList.toggle('selected',i===0);button.setAttribute('aria-pressed',String(i===0));});
