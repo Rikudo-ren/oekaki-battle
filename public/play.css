@@ -632,3 +632,62 @@ body.screen-game .game-stage.is-my-turn .prompt-line h2{color:#8f512b}
 .ai-start{margin-top:11px;padding:10px 16px;border:0;border-radius:9px;background:#ef806d;color:#fff;font-size:12px;font-weight:900;box-shadow:0 3px 0 #d26955}
 
 body.screen-game .game-status #ai-game-status:not(.hidden){display:block;grid-column:1 / -1;white-space:normal;overflow:visible;margin:5px 0;padding:7px 10px;border:1px solid #88b9d0;border-radius:8px;background:#edf8ff;color:#174f6b;font-size:13px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+
+/* Only the active drawer gets a space-saving drawing layout.  Scores, timer,
+   score bands, chat history and the chat input remain available. */
+@media(min-width:701px){
+ body.screen-game.is-drawing-turn .room-side{height:100px}
+ body.screen-game.is-drawing-turn .room-heading{min-height:21px}
+ body.screen-game.is-drawing-turn .room-heading h1{font-size:13px}
+ body.screen-game.is-drawing-turn .room-heading p{font-size:10px}
+ body.screen-game.is-drawing-turn .game-status{padding:5px 8px;gap:5px}
+ body.screen-game.is-drawing-turn .turn-role:not(.hidden){display:none}
+ body.screen-game.is-drawing-turn .game-stage{grid-template-columns:minmax(112px,155px) minmax(0,1fr) minmax(110px,135px)}
+ body.screen-game.is-drawing-turn .game-players{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+ body.screen-game.is-drawing-turn .game-players::before{margin:0 0 3px}
+ body.screen-game.is-drawing-turn .game-player{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:0;padding:3px}
+ body.screen-game.is-drawing-turn .game-player .avatar{width:25px;height:25px;font-size:15px}
+ body.screen-game.is-drawing-turn .game-player-name{width:100%;text-align:center;font-size:10px;line-height:1.1}
+ body.screen-game.is-drawing-turn .game-player-score{font-size:10px;line-height:1.1}
+ body.screen-game.is-drawing-turn .tools:not(.hidden){gap:6px}
+ body.screen-game.is-drawing-turn .tool-heading small,body.screen-game.is-drawing-turn .tool-heading span{display:none}
+ body.screen-game.is-drawing-turn .colors{grid-template-columns:repeat(3,30px);gap:5px}
+ body.screen-game.is-drawing-turn .colors button{width:30px;height:30px}
+ body.screen-game.is-drawing-turn .tool-actions{width:min(110px,100%);gap:4px}
+ body.screen-game.is-drawing-turn .tool-button:not(.whistle),body.screen-game.is-drawing-turn .brush-menu summary{min-height:30px;padding:5px;font-size:11px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-panel{padding:6px 10px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-form input{height:36px}
+}
+@media(max-width:700px){
+ body.screen-game.is-drawing-turn .room-side{height:96px;min-height:96px}
+ body.screen-game.is-drawing-turn .game-players{padding-top:2px;gap:2px}
+ body.screen-game.is-drawing-turn .game-player{padding:1px;gap:0}
+ body.screen-game.is-drawing-turn .game-player .avatar{width:22px;height:22px;font-size:14px}
+ body.screen-game.is-drawing-turn .game-player-name,body.screen-game.is-drawing-turn .game-player-score{font-size:9px;line-height:1.05}
+ body.screen-game.is-drawing-turn .tools:not(.hidden){padding:3px 1px;gap:4px}
+ body.screen-game.is-drawing-turn .tool-button:not(.whistle),body.screen-game.is-drawing-turn .brush-menu summary{min-height:28px;padding:4px;font-size:10px}
+ body.screen-game.is-drawing-turn .colors{gap:4px}
+ body.screen-game.is-drawing-turn .colors button{width:24px;height:24px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-panel{padding:4px 6px}
+ body.screen-game.is-drawing-turn:not(.chat-open) .chat-form input{height:31px}
+}
+@media(max-width:700px) and (max-height:700px){
+ body.screen-game.is-drawing-turn .room-side{height:82px;min-height:82px}
+ body.screen-game.is-drawing-turn .gauge-heading{display:flex;margin-bottom:1px;font-size:8px;line-height:1}
+ body.screen-game.is-drawing-turn .game-player .avatar{width:19px;height:19px;font-size:12px}
+}
+
+/* Ranking is reserved for the end of the match, not each lap. */
+.final-ranking{background:#fffdf4;border:2px solid #f0d98c;border-radius:18px;padding:12px 16px;margin:10px 0;max-height:35dvh;overflow:auto}
+.final-ranking h2{margin:0 0 8px;color:#286d88;font-size:18px}.final-ranking ol{list-style:none;padding:0;margin:0;display:grid;gap:5px}.final-ranking li{display:flex;justify-content:space-between;gap:12px;background:#fff4cd;border-radius:9px;padding:6px 10px;font-weight:800}.final-ranking li span{min-width:0;overflow-wrap:anywhere}.final-ranking li strong{white-space:nowrap;color:#dc785a}
+
+/* Between laps, let the GM decide without showing the final ranking. */
+body.screen-game .round-choice{flex:none;text-align:center;padding:10px 12px;background:#fff7da;border:2px solid #e9d18b;border-radius:15px;color:#286d88}
+body.screen-game .round-choice strong{display:block;margin-bottom:7px}
+body.screen-game .round-choice p{margin:0;font-size:13px;font-weight:700}
+body.screen-game .round-choice-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+body.screen-game .round-choice-actions button{min-height:38px}
+body.screen-game .is-between-rounds .canvas-wrap{display:none}
+@media(max-width:700px){body.screen-game .round-choice{padding:7px}body.screen-game .round-choice strong{margin-bottom:4px;font-size:13px}body.screen-game .round-choice-actions button{min-height:32px;font-size:12px}}
+body.screen-game .round-choice-actions button{flex:1 1 210px;width:auto;height:auto;margin:0;padding:9px 12px}
+@media(max-width:700px){body.screen-game .round-choice-actions button{flex-basis:120px}}

@@ -61,3 +61,7 @@ test('各正解者ごとに描き手へ得点、パス後のIDと同点順位も
  assert.deepEqual(scoresForRoom(room,{8:claim},100000,8),{a:1,b:3,c:3});
  assert.deepEqual(ranking(room,{a:3,b:5,c:5}).map(x=>[x.uid,x.rank]),[['b',1],['c',1],['a',3]]);
 });
+test('不在スキップ前に確定した正解は即時加点し、お題は再利用しない',async()=>{
+ const {scoresForRoom}=await import('../src/scoring.mjs');const room={scoreMode:'thirds',schedule:['drawer','a'],players:{drawer:{score:0},a:{score:0}}};const claims={0:{ended:{reason:'skip',at:4000},slots:{s0:{uid:'a',startedAt:1000,duration:60,at:3000}}}};
+ assert.deepEqual(scoresForRoom(room,claims,4000),{drawer:15,a:20});assert.deepEqual(scoresForRoom(room,claims,4000,0),{drawer:0,a:0});
+});

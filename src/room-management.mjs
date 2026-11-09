@@ -1,5 +1,6 @@
 export const ABANDONED_AFTER_MS = 5 * 60 * 1000;
-export const DRAWER_ABSENT_AFTER_MS = 30 * 1000;
+// Skip only once the presence system has recorded a disconnect.
+export const DRAWER_ABSENT_AFTER_MS = 0;
 
 export function isOnline(room, uid) {
   return !!room?.online?.[uid] && Object.keys(room.online[uid]).length > 0;

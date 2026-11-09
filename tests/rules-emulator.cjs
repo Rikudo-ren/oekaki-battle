@@ -171,3 +171,44 @@ test('Realtime Database: GMは参加者が接続中でも退出時に部屋を�
   await assertSucceeds(host.ref('rooms/EXIT01').set(null));
  }finally{await env.cleanup();}
 });
+
+test('Realtime Database: 切断した出題者だけをGMが即時スキップし、確定済み正解を残す',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-skip',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  const started=Date.now()-5000,slot={uid:'alice',at:started+4000,startedAt:started+3000,duration:60};
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/SKIP01').set({host:'host',phase:'playing',gameId:'game',players:{host:{name:'host',score:0},drawer:{name:'drawer',score:0},alice:{name:'alice',score:0}},online:{host:{tab:true},drawer:{one:true,two:true},alice:{tab:true}},lastDisconnects:{drawer:Date.now()-100},drawer:'drawer',turn:0,turnStartedAt:started,timeLimit:60,maxCorrect:2});await c.database().ref('claims/SKIP01/game/0').set({slots:{s0:slot}});});
+  const db=uid=>env.authenticatedContext(uid).database(),claim='claims/SKIP01/game/0',skip=current=>({...current,ended:{reason:'skip',at:timestamp}});
+  await assertFails(db('host').ref(claim).transaction(skip,undefined,false));
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/SKIP01/online/drawer/one').set(null);});
+  await assertFails(db('host').ref(claim).transaction(skip,undefined,false));
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/SKIP01/online/drawer').set(null);await c.database().ref('rooms/SKIP01/lastDisconnects/drawer').set(Date.now());});
+  await assertFails(db('alice').ref(claim).transaction(skip,undefined,false));
+  await assertSucceeds(db('host').ref(claim).transaction(skip,undefined,false));
+  assert.deepEqual((await db('host').ref(claim).get()).val().slots.s0,slot);
+  await assertFails(db('host').ref(claim).transaction(skip,undefined,false));
+ }finally{await env.cleanup();}
+});
+
+test('Realtime Database: 描画中のチャンクと次の周のお題作成',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-stream',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/STRM01').set({host:'host',phase:'playing',gameId:'game',players:{host:{name:'host',score:0},drawer:{name:'drawer',score:0},guest:{name:'guest',score:0}},drawer:'drawer',turn:0,turnStartedAt:Date.now()-5000,timeLimit:60});});
+  const db=uid=>env.authenticatedContext(uid).database(),path='drawings/STRM01/game/0';
+  const chunk={color:'#393632',width:5,strokeId:'stroke-123',points:'[[0,0],[10,10]]'};
+  await assertSucceeds(db('drawer').ref(`${path}/a`).set(chunk));await assertSucceeds(db('drawer').ref(`${path}/b`).set({...chunk,points:'[[10,10],[20,20]]'}));
+  await assertFails(db('guest').ref(`${path}/c`).set(chunk));await assertFails(db('drawer').ref(`${path}/a`).set(chunk));await assertFails(db('drawer').ref(`${path}/bad`).set({...chunk,strokeId:'x'.repeat(33)}));
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/STRM01').update({phase:'starting',startOrigin:'round'});});
+  await assertSucceeds(db('host').ref('secrets/STRM01/game/8').set('ねこ'));await assertFails(db('guest').ref('secrets/STRM01/game/9').set('いぬ'));
+ }finally{await env.cleanup();}
+});
+
+test('Realtime Database: 周回後も新規参加でき、進行選択はGMだけ',async()=>{
+ const env=await initializeTestEnvironment({projectId:'demo-oekaki-boundary',database:{rules:fs.readFileSync('database.rules.json','utf8')}});
+ try{
+  await env.withSecurityRulesDisabled(async c=>{await c.database().ref('rooms/LAP001').set({host:'host',phase:'roundEnd',gameId:'game',players:{host:{name:'host',score:0},guest:{name:'guest',score:0}},online:{host:{tab:true},guest:{tab:true}}});});
+  const db=uid=>env.authenticatedContext(uid).database();
+  await assertSucceeds(db('late').ref('rooms/LAP001/players/late').set({name:'late',score:0}));
+  await assertFails(db('guest').ref('rooms/LAP001').update({phase:'finished',finishedAt:timestamp}));
+  await assertSucceeds(db('host').ref('rooms/LAP001').update({phase:'finished',finishedAt:timestamp}));
+ }finally{await env.cleanup();}
+});
