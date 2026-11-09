@@ -2,5 +2,10 @@
   "framework": null,
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "functions": {
+    "api/ai.js": {
+      "maxDuration": 30
+    }
+  }
 }

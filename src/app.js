@@ -3,6 +3,7 @@ import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import { createMemoryDatabase, ref, onValue, push, set, get, runTransaction, query, limitToLast, serverTimestamp, update, onDisconnect } from './database.mjs';
 import { soloDrawings, cpuWord } from './solo-drawings.mjs';
+import { aiRequest, parseAiDrawing, parseAiGuess } from './ai.mjs';
 import { reduceDrawingEvents, pointerToLogical, logicalToCanvasY } from './drawing.mjs';
 import { remainingMs, awardForClaim, timeBand } from './timing.mjs';
 import { scoreDeltas, scoresForRoom, ranking } from './scoring.mjs';
@@ -24,6 +25,7 @@ let scoreboardAnimation=null, scoreboardFrame=null, answerSlotKey='';
 const PUBLIC_ROOMS={'OPEN01':'わいわい部屋','OPEN02':'のんびり部屋','OPEN03':'おえかき部屋'};
 const CPU_IDS=['cpu-1','cpu-2','cpu-3'];
 let soloMode=false, savedUser=null, savedDb=null, botTurnKey='', botPlan=[], botDrawn=0, botWord='', botLoading=false, botWriting=false;
+const AI_BOT='cpu-1';let soloAI=null, aiDraw=null, aiAbort=null, aiModelAbort=null;
 const pointFields=[['answer-early','answerEarly'],['answer-middle','answerMiddle'],['answer-late','answerLate'],['drawer-early','drawerEarly'],['drawer-middle','drawerMiddle'],['drawer-late','drawerLate'],['flat-points','flatPoints'],['flat-drawer-points','flatDrawerPoints']];
 const canvas=$('canvas'), ctx=canvas.getContext('2d');
 const show=(id, visible)=>$(id).classList.toggle('hidden',!visible);
@@ -311,7 +313,7 @@ function maybeTransferHost(){
   });
  }).catch(e=>console.error('ホスト交代を再試行します',e)).finally(()=>{hostElectionPending=false;hostElectionRetryAt=Date.now()+1000;});
 }
-async function action(button, task){const entry=button.closest('#home'),buttons=entry?[...entry.querySelectorAll('#create,#join,#solo-start,[data-public-room]')]:[button];if(buttons.some(item=>item.disabled))return;buttons.forEach(item=>item.disabled=true);try{await task();}catch(e){toast(friendly(e));}finally{buttons.forEach(item=>item.disabled=false);}}
+async function action(button, task){const entry=button.closest('#home'),buttons=entry?[...entry.querySelectorAll('#create,#join,#solo-start,#ai-start,[data-public-room]')]:[button];if(buttons.some(item=>item.disabled))return;buttons.forEach(item=>item.disabled=true);try{await task();}catch(e){toast(friendly(e));}finally{buttons.forEach(item=>item.disabled=false);}}
 function enterRoom(roomCode){
   $('time-limit').value='30';
   code=roomCode; startPresence(roomCode);show('home',false);show('room',true);$('room-code').textContent=soloMode?'CPU対戦':(PUBLIC_ROOMS[code]||code);$('room-code-kicker').textContent=soloMode?'SOLO MODE':PUBLIC_ROOMS[code]?'PUBLIC ROOM':'ROOM CODE';$('room-code-icon').textContent=soloMode?'🤖':PUBLIC_ROOMS[code]?'🌐':'💌';show('copy',!soloMode&&!PUBLIC_ROOMS[code]);$('room-code-title').textContent=soloMode?'ひとりでCPU対戦':PUBLIC_ROOMS[code]?'だれでも入れる公開部屋':'部屋の合言葉';$('room-code-description').textContent=soloMode?'CPUと交互に描いて当てよう！':PUBLIC_ROOMS[code]?'誰でも途中から参加できます':'この合言葉を友だちに教えてね';
@@ -323,7 +325,7 @@ function enterRoom(roomCode){
   if(timerHandle)clearInterval(timerHandle);timerHandle=setInterval(()=>{updateTimer();maybeTransferHost();maybeSkipAbsentDrawer();maybePruneLobby();maybeAdvancePass();maybeRunSoloBots();},250);
   window.scrollTo(0,0);
 }
-function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);show('room',false);show('home',true);}
+function goHome(){document.body.classList.remove('screen-lobby','screen-game','is-typing');setMusicScene('room');closeChat();const gm=$('gm-dialog');if(gm.open){if(typeof gm.close==='function')gm.close();else gm.removeAttribute('open');}const settings=$('settings-dialog');if(settings.open){if(typeof settings.close==='function')settings.close();else settings.removeAttribute('open');}if(presenceSession)void stopPresence().catch(e=>console.error(e));if(unsubscribe)unsubscribe();if(unsubscribeDrawing)unsubscribeDrawing();if(unsubscribeClaims)unsubscribeClaims();if(unsubscribeChat)unsubscribeChat();unsubscribe=null;unsubscribeClaims=null;unsubscribeChat=null;unsubscribeDrawing=null;if(timerHandle)clearInterval(timerHandle);timerHandle=null;timeoutPending='';timeoutWord='';timeoutWordKey='';countdownKey='';countdownValue=0;revealKey='';revealRetryAt=0;show('countdown',false);show('round-end',false);show('answer-scene',false);show('final-scene',false);show('correct-notice',false);clearTimeout(correctNoticeTimer);show('scoreboard',false);stopScoreboardAnimation();scoreboardKey='';presentationKey='';endSceneKey='';answerSceneKey='';finalSceneKey='';soundFinalKey='';answerSlotKey='';clearTimeout(hintNoticeTimer);hintNoticeKey='';show('hint-notice',false);hintKey='';hintValue=null;hintPending='';hintRetryAt=0;soundTurnKey='';soundResultKey='';soundHadRoomState=false;soundAnswerKey='';soundAnswerCount=0;claims={};claimsInitialized=false;chatMessages={};chatRevealedWords={};chatWordPending={};chatGuardKey='';passAdvancePending='';passRetryAt=0;lastRenderedPhase='';subscribedGameId='';strokes=[];drawing=false;activeTurn=undefined;wordKey=undefined;drawerWord='';room=null;code=null;if(soloMode){soloMode=false;user=savedUser;db=savedDb;savedUser=null;savedDb=null;if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;soloAI=null;botTurnKey='';botWord='';botPlan=[];botLoading=false;botWriting=false;serverOffset=0;}delete $('chat-messages').dataset.loaded;renderChat(null);show('room',false);show('home',true);}
 function refreshSoundButton(){const on=soundEnabled(),button=$('sound-toggle');button.setAttribute('aria-pressed',String(on));button.setAttribute('aria-label',on?'効果音をオフにする':'効果音をオンにする');button.querySelector('span').textContent=on?'効果音 ON':'効果音 OFF';}
 $('sound-toggle').onclick=()=>{setSoundEnabled(!soundEnabled());refreshSoundButton();if(soundEnabled())playSound('turn');};
 document.addEventListener('pointerdown',unlockAudio,{passive:true});document.addEventListener('keydown',unlockAudio);
@@ -357,14 +359,41 @@ function updateHintSetting(){
 }
 for(const id of ['time-limit','custom-time'])$(id).addEventListener('change',updateHintSetting);
 $('create').onclick=()=>action($('create'),async()=>{const name=$('create-name').value.trim();if(!name)throw Error('なまえを入力してね。');await connect();const result=await call('createRoom',{name});enterRoom(result.code);void sweepKnownRooms();});
-$('solo-start').onclick=()=>action($('solo-start'),async()=>{
+function resetAiModels(){
+ if(aiModelAbort)aiModelAbort.abort();aiModelAbort=null;
+ const select=$('ai-model');select.replaceChildren(new Option('モデルを選択',''),new Option('モデルIDを直接入力','__custom'));select.value='';show('ai-custom-wrap',false);
+ setText('ai-model-status','キーを入力してモデル一覧を取得するか、モデルIDを直接入力してください。');$('ai-load-models').disabled=false;
+}
+$('ai-provider').addEventListener('change',resetAiModels);$('ai-key').addEventListener('input',resetAiModels);
+$('ai-model').addEventListener('change',()=>{const value=$('ai-model').value;show('ai-custom-wrap',value==='__custom');if(value&&value!=='__custom')setText('ai-model-status','選択中: '+value+'（画像入力対応を確認してください）');});
+$('ai-load-models').onclick=async()=>{
+ const key=$('ai-key').value.trim(),provider=$('ai-provider').value;
+ if(!key){setText('ai-model-status','先にAPIキーを入力してください。');return;}
+ if(aiModelAbort)aiModelAbort.abort();const controller=new AbortController();aiModelAbort=controller;$('ai-load-models').disabled=true;setText('ai-model-status','利用できるモデルを取得しています…');
+ try{
+  const result=await aiRequest({key,provider,model:''},'models',{},controller.signal);
+  if(aiModelAbort!==controller)return;
+  if(!Array.isArray(result.models))throw Error('モデル一覧を取得できませんでした。');
+  const select=$('ai-model');select.replaceChildren(new Option('モデルを選択',''));
+  for(const item of result.models){if(!item||typeof item.id!=='string'||typeof item.label!=='string')continue;select.add(new Option(item.label===item.id?item.id:`${item.label}（${item.id}）`,item.id));}
+  select.add(new Option('モデルIDを直接入力','__custom'));select.value='';show('ai-custom-wrap',false);
+  setText('ai-model-status',result.models.length?'モデルを選んでください。画像入力とテキスト出力に対応したモデルが必要です。':'対象モデルが見つかりません。モデルIDを直接入力できます。');
+ }catch(e){if(aiModelAbort===controller)setText('ai-model-status',`${e.message||'取得に失敗しました。'} モデルIDの直接入力もできます。`);}
+ finally{if(aiModelAbort===controller){aiModelAbort=null;$('ai-load-models').disabled=false;}}
+};
+async function startSolo(){
  const name=$('quick-name').value.trim();if(!name)throw Error('なまえを入力してね。');
+ const key=$('ai-key').value.trim(),model=$('ai-model').value==='__custom'?$('ai-custom-model').value.trim():$('ai-model').value;
+ if(key&&!/^[a-zA-Z0-9._:-]{1,160}$/.test(model))throw Error('AIのモデルを選択するか、モデルIDを入力してね。');
+ soloAI=key?{provider:$('ai-provider').value,key,model}:null;
  savedUser=user;savedDb=db;soloMode=true;user={uid:'solo-human'};db=createMemoryDatabase();serverOffset=0;
  const players={[user.uid]:{name,score:0}},online={};
- CPU_IDS.forEach((uid,i)=>{players[uid]={name:['もも','そら','まる'][i]+' CPU',score:0};online[uid]={local:true};});
+ CPU_IDS.forEach((uid,i)=>{players[uid]={name:uid===AI_BOT&&soloAI?'あい AI':['もも','そら','まる'][i]+' CPU',score:0};online[uid]={local:true};});
  const roomCode='SOLO00';await set(ref(db,`rooms/${roomCode}`),{host:user.uid,phase:'lobby',gameId:randomId(20),players,online,createdAt:serverTimestamp(),lastOnline:serverTimestamp()});
  $('hint-seconds').value='10';enterRoom(roomCode);
-});
+}
+$('solo-start').onclick=()=>action($('solo-start'),startSolo);
+$('ai-start').onclick=()=>action($('ai-start'),startSolo);
 document.querySelectorAll('[data-public-room]').forEach(button=>button.onclick=()=>action(button,async()=>{
  const name=$('quick-name').value.trim();if(!name)throw Error('なまえを入力してね。');await connect();const roomCode=button.dataset.publicRoom;await call('openPublicRoom',{name,code:roomCode});enterRoom(roomCode);void sweepKnownRooms();
 }));
@@ -539,7 +568,7 @@ function render(){
  const showFinal=finalSceneVisible(room,now);show('final-scene',showFinal);if(showFinal&&finalSceneKey!==`${sceneKey}:${room.finishedAt}`){finalSceneKey=`${sceneKey}:${room.finishedAt}`;$('final-scene').style.setProperty('--scene-offset',`${-Math.max(0,now-room.finishedAt)}ms`);}if(!showFinal)finalSceneKey='';document.body.classList.toggle('screen-lobby',lobby);document.body.classList.toggle('screen-game',!lobby);$('game').classList.toggle('is-ended',ended);$('game').classList.toggle('is-revealed',revealed);setMusicScene(lobby||finished?'room':'play');
  show('lobby',lobby);show('game',!lobby);show('players-panel',lobby);show('start',host&&room.phase==='lobby');show('settings-open',host&&room.phase==='lobby');$('settings-label').textContent=host?'⚙️ ルールをカスタマイズ':'⚙️ ルールはホストが設定します';show('start-hint',lobby&&(!host||room.phase==='starting'));$('start-hint').textContent=room.phase==='starting'?'ゲームを準備しています…':'ホストがゲームを開始するまで待ってね';$('rounds').disabled=!host;$('time-limit').disabled=!host;updateHintSetting();updateGameSounds();
  $('room-title').textContent=lobby?'みんなの部屋':finished?'ゲーム終了！':'おえかきバトル！';
- $('room-subtitle').textContent=soloMode?'ひとりでCPUと対戦':PUBLIC_ROOMS[code]?PUBLIC_ROOMS[code]:lobby?'友だちを招待しよう！':`合言葉 ${code}`;
+ $('room-subtitle').textContent=soloMode?(soloAI?'AIとCPUに挑戦':'ひとりでCPUと対戦'):PUBLIC_ROOMS[code]?PUBLIC_ROOMS[code]:lobby?'友だちを招待しよう！':`合言葉 ${code}`;
  const scores=lobby?null:scoresForRoom(room,claims,Date.now()+serverOffset),finalRanks=finished?ranking(room,scores):[];
  const players=Object.entries(room.players||{}).map(([id,p])=>[id,{...p,score:lobby?(p.score||0):scores[id]}]); $('player-count').textContent=`${players.length}人`;
  const order=room.order||players.map(([id])=>id);players.sort((a,b)=>{const sequence=finished?finalRanks.map(item=>item.uid):order;const x=sequence.indexOf(a[0]),y=sequence.indexOf(b[0]);return (x<0?Infinity:x)-(y<0?Infinity:y)||a[0].localeCompare(b[0]);});
@@ -727,37 +756,81 @@ function maybeAdvancePass(){
  })().catch(e=>{console.error('パス後のお題を再試行します',e);}).finally(()=>{if(passAdvancePending===key)passAdvancePending='';passRetryAt=Date.now()+1000;});
 }
 
-// Solo opponents are local simulations, not image recognition. Drawings and
-// answer timing are scoped to the current turn and never touch Firebase.
+// The optional AI is one local opponent. The other two bots retain their
+// simulated behavior; the AI only receives a canvas image, never the answer.
+function soloTurnIsCurrent(key){return soloMode&&!!room&&room.phase==='playing'&&botTurnKey===key&&!claims[room.turn]?.ended;}
+function aiCanvasImage(){
+ const snapshot=document.createElement('canvas');snapshot.width=384;snapshot.height=384;const context=snapshot.getContext('2d');
+ context.fillStyle='#fff';context.fillRect(0,0,384,384);context.drawImage(canvas,0,0,384,384);return snapshot.toDataURL('image/png');
+}
+async function recordBotCorrect(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb){
+ if(!soloTurnIsCurrent(key)||db!==currentDb||turnExpired())return;
+ const result=await transaction(`claims/${roomCode}/${gameId}/${turn}`,current=>{
+  if(!soloTurnIsCurrent(key)||db!==currentDb||turnExpired())return;
+  current=current||{};if(current.ended||correctEntries(current).some(entry=>entry.uid===bot.uid))return;
+  const slot=nextSlot(current,limit);if(!slot)return;
+  current.slots={...(current.slots||{}),[slot]:{uid:bot.uid,at:serverTimestamp(),startedAt:start,duration}};
+  if(correctEntries(current).length===limit)current.ended={reason:'full',at:serverTimestamp()};return current;
+ });
+ if(!result.committed||!soloMode||db!==currentDb||botTurnKey!==key)return;
+ await set(push(ref(currentDb,`chats/${roomCode}/${gameId}`)),{uid:bot.uid,name:room.players[bot.uid]?.name||'CPU',text:'●●●',kind:'correct',turn,at:serverTimestamp()});
+}
+async function aiGuess(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb){
+ bot.busy=true;bot.attempts++;const controller=new AbortController();aiAbort=controller;
+ try{
+  const length=room.lengths[turn],image=aiCanvasImage();
+  const result=await aiRequest(soloAI,'guess',{length,image},controller.signal);
+  if(!soloTurnIsCurrent(key)||db!==currentDb||turnExpired())return;
+  const guess=parseAiGuess(result.text,length);
+  if(guess){
+   const answer=(await get(ref(currentDb,`secrets/${roomCode}/${gameId}/${turn}`))).val();
+   if(!soloTurnIsCurrent(key)||db!==currentDb||turnExpired())return;
+   if(guess===answer){bot.done=true;await recordBotCorrect(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb);return;}
+   if(guess!==bot.lastGuess){bot.lastGuess=guess;await set(push(ref(currentDb,`chats/${roomCode}/${gameId}`)),{uid:bot.uid,name:room.players[bot.uid]?.name||'AI',text:guess,at:serverTimestamp()});}
+  }
+  if(bot.attempts>=2)bot.done=true;else bot.at=Date.now()+serverOffset-start+7000;
+ }catch(e){
+  if(soloTurnIsCurrent(key)&&db===currentDb&&!turnExpired()&&!controller.signal.aborted){bot.fallback=true;toast('AIの回答に失敗したため、このターンはCPUが代わりに回答します。');}
+ }finally{bot.busy=false;if(aiAbort===controller)aiAbort=null;}
+}
 function maybeRunSoloBots(){
- if(!soloMode||!room||room.phase!=='playing')return;
- const {turn,gameId}=room, roomCode=code, key=`${roomCode}:${gameId}:${room.matchId}:${turn}`, now=Date.now()+serverOffset, start=turnStart(room),claim=claims[turn];
- if(botTurnKey!==key){botTurnKey=key;botWord='';botDrawn=0;botLoading=false;botWriting=false;botPlan=CPU_IDS.filter(uid=>uid!==room.drawer).map((uid,i)=>({uid,at:(room.timeLimit?room.timeLimit*1000:40000)*(.22+i*.20+randomInt(10)/100),done:false}));}
- if(claim?.ended||!Number.isFinite(start)||now<start||room.timeLimit&&remainingMs(start,room.timeLimit,now)===0)return;
+ if(!soloMode||!room||room.phase!=='playing'){if(aiAbort)aiAbort.abort();aiAbort=null;return;}
+ const {turn,gameId}=room,roomCode=code,key=`${roomCode}:${gameId}:${room.matchId}:${turn}`,now=Date.now()+serverOffset,start=turnStart(room),claim=claims[turn];
+ if(botTurnKey!==key){
+  if(aiAbort)aiAbort.abort();aiAbort=null;aiDraw=null;botTurnKey=key;botWord='';botDrawn=0;botLoading=false;botWriting=false;
+  botPlan=CPU_IDS.filter(uid=>uid!==room.drawer).map((uid,i)=>({uid,at:(room.timeLimit?room.timeLimit*1000:40000)*(.22+i*.20+randomInt(10)/100),done:false,busy:false,attempts:0,fallback:false}));
+ }
+ if(claim?.ended||!Number.isFinite(start)||room.timeLimit&&now>=start+room.timeLimit*1000){if(aiAbort)aiAbort.abort();aiAbort=null;return;}
+ // Begin fetching the AI line drawing during the countdown to reduce latency.
+ if(CPU_IDS.includes(room.drawer)&&!botWord&&!botLoading){botLoading=true;get(ref(db,`secrets/${roomCode}/${gameId}/${turn}`)).then(snap=>{if(soloTurnIsCurrent(key))botWord=snap.val()||'';}).finally(()=>{if(botTurnKey===key)botLoading=false;});}
+ if(room.drawer===AI_BOT&&soloAI&&botWord&&!aiDraw){
+  const controller=new AbortController(),state={pending:true,drawing:null,controller};aiDraw=state;aiAbort=controller;
+  aiRequest(soloAI,'draw',{word:botWord},controller.signal).then(result=>{
+   if(!soloTurnIsCurrent(key)||aiDraw!==state||!state.pending||controller.signal.aborted)return;
+   const drawing=parseAiDrawing(result.text);if(!drawing)throw Error('invalid drawing');state.drawing=drawing;state.pending=false;
+  }).catch(()=>{if(soloTurnIsCurrent(key)&&aiDraw===state&&!controller.signal.aborted){state.pending=false;toast('AIの描画に失敗したため、このターンはCPUの絵を表示します。');}}).finally(()=>{if(aiAbort===controller)aiAbort=null;});
+ }
+ if(now<start)return;
  const elapsed=now-start;
  if(CPU_IDS.includes(room.drawer)){
-  if(!botWord&&!botLoading){botLoading=true;get(ref(db,`secrets/${roomCode}/${gameId}/${turn}`)).then(snap=>{if(soloMode&&botTurnKey===key)botWord=snap.val()||'';}).finally(()=>{if(botTurnKey===key)botLoading=false;});}
-  const drawing=soloDrawings[botWord];
+  if(aiDraw?.pending&&elapsed>=8000){aiDraw.pending=false;aiDraw.controller.abort();toast('AIの描画に時間がかかったため、このターンはCPUの絵を表示します。');}
+  const drawing=room.drawer===AI_BOT&&soloAI?(aiDraw?.pending?null:aiDraw?.drawing||soloDrawings[botWord]):soloDrawings[botWord];
   if(drawing&&!botWriting&&botDrawn<drawing.length){
    const step=Math.min(600,Math.max(180,(room.timeLimit||40)*650/drawing.length));
    if(elapsed>=botDrawn*step){const stroke=drawing[botDrawn++];botWriting=true;const target=ref(db,`drawings/${roomCode}/${gameId}/${turn}`);set(push(target),{color:stroke.color,width:stroke.width,points:JSON.stringify(stroke.points)}).catch(console.error).finally(()=>{if(botTurnKey===key)botWriting=false;});}
   }
  }
  for(const bot of botPlan){
-  if(bot.done||elapsed<bot.at)continue;bot.done=true;
-  const currentDb=db, duration=room.timeLimit, limit=room.maxCorrect;
-  transaction(`claims/${roomCode}/${gameId}/${turn}`,current=>{
-   current=current||{};if(current.ended||correctEntries(current).some(entry=>entry.uid===bot.uid))return;
-   const slot=nextSlot(current,limit);if(!slot)return;
-   current.slots={...(current.slots||{}),[slot]:{uid:bot.uid,at:serverTimestamp(),startedAt:start,duration}};
-   if(correctEntries(current).length===limit)current.ended={reason:'full',at:serverTimestamp()};
-   return current;
-  }).then(result=>{
-   if(!result.committed||!soloMode||db!==currentDb||botTurnKey!==key)return;
-   return set(push(ref(currentDb,`chats/${roomCode}/${gameId}`)),{uid:bot.uid,name:room.players[bot.uid]?.name||'CPU',text:'●●●',kind:'correct',turn,at:serverTimestamp()});
-  }).catch(console.error);
+  if(bot.done||bot.busy||elapsed<bot.at)continue;
+  const currentDb=db,duration=room.timeLimit,limit=room.maxCorrect;
+  if(soloAI&&bot.uid===AI_BOT&&!bot.fallback){
+   if(!strokes.length)continue;
+   void aiGuess(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb);continue;
+  }
+  bot.done=true;void recordBotCorrect(bot,key,roomCode,gameId,turn,start,duration,limit,currentDb).catch(console.error);
  }
 }
+
 function maybePruneLobby(){
  if(!room||room.phase!=='lobby'||room.host!==user?.uid||prunePending||Date.now()<pruneRetryAt)return;
  const now=Date.now()+serverOffset;
