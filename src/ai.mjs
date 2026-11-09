@@ -2,10 +2,10 @@
 export async function aiRequest(config,action,extra={},signal){
  const controller=new AbortController(),cancel=()=>controller.abort();
  if(signal?.aborted)controller.abort();else signal?.addEventListener('abort',cancel,{once:true});
- const timeout=setTimeout(cancel,20000);
+ const timeout=setTimeout(cancel,29000);
  try{
   const response=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({provider:config.provider,key:config.key,model:config.model,action,...extra}),signal:controller.signal});
-  let body;try{body=await response.json();}catch{throw new Error('AIサービスに接続できませんでした。');}
+  let body;try{body=await response.json();}catch{const status=Number.isInteger(response.status)?`（HTTP ${response.status}）`:'';throw new Error(`サイトのAI中継から応答を読み取れませんでした${status}。`);}
   if(!response.ok)throw new Error(typeof body.error==='string'?body.error:'AIサービスに接続できませんでした。');
   return body;
  }finally{clearTimeout(timeout);signal?.removeEventListener('abort',cancel);}

@@ -45,3 +45,31 @@ test('AIへのリクエストは中止でき、キーはURLや永続領域に書
   const controller=new AbortController(),pending=aiRequest({provider:'openai',key:'secret-test',model:'gpt-test'},'guess',{image:'data:image/png;base64,YQ==',length:2},controller.signal);controller.abort();await assert.rejects(pending,/aborted/);assert.equal(seen.url,'/api/ai');assert.ok(!seen.url.includes('secret-test'));assert.equal(seen.options.cache,'no-store');
  }finally{global.fetch=old;}
 });
+test('Gemini 3.8 Flashは低思考とJSON出力を使用し、思考部分を回答に混ぜない',async()=>{
+ const old=global.fetch,calls=[];
+ try{
+  global.fetch=async(url,options)=>{calls.push({url,options});return ok({candidates:[{finishReason:'STOP',content:{parts:[{text:'内部情報',thought:true},{text:'{"strokes":[]}' }]}}]});};
+  const result=await call({provider:'gemini',key:'secret-test',model:'gemini-3.8-flash',action:'draw',word:'ねこ'});
+  assert.equal(result.statusCode,200);assert.equal(result.body.text,'{"strokes":[]}');const request=JSON.parse(calls[0].options.body);
+  assert.equal(calls[0].options.headers['x-goog-api-key'],'secret-test');assert.deepEqual(request.generationConfig,{maxOutputTokens:8192,thinkingConfig:{thinkingLevel:'low'},responseMimeType:'application/json'});assert.ok(calls[0].url.endsWith('/models/gemini-3.8-flash:generateContent'));
+  await call({provider:'gemini',key:'secret-test',model:'gemini-3.8-flash',action:'guess',length:2,image:'data:image/png;base64,YQ=='});
+  assert.deepEqual(JSON.parse(calls[1].options.body).generationConfig,{maxOutputTokens:2048,thinkingConfig:{thinkingLevel:'low'}});
+  await call({provider:'gemini',key:'secret-test',model:'gemini-2.5-flash',action:'draw',word:'ねこ'});
+  assert.deepEqual(JSON.parse(calls[2].options.body).generationConfig,{maxOutputTokens:4096});
+  global.fetch=async()=>ok({candidates:[{finishReason:'MAX_TOKENS',content:{parts:[{text:'{"strokes":['}]}}]});
+  const truncated=await call({provider:'gemini',key:'secret-test',model:'gemini-3.8-flash',action:'draw',word:'ねこ'});assert.equal(truncated.statusCode,502);assert.match(truncated.body.error,/途中で切れ/);
+ }finally{global.fetch=old;}
+});
+test('通信、タイムアウト、サービス側HTTPエラーを区別し秘密は返さない',async()=>{
+ const old=global.fetch,body={provider:'gemini',key:'secret-test',model:'gemini-3.8-flash',action:'draw',word:'ねこ'};
+ try{
+  global.fetch=async()=>{throw Object.assign(new Error('secret-test'),{name:'TimeoutError'});};let res=await call(body);assert.equal(res.statusCode,504);assert.match(res.body.error,/25秒/);
+  global.fetch=async()=>{throw new TypeError('secret-test');};res=await call(body);assert.equal(res.statusCode,502);assert.match(res.body.error,/中継サーバー/);assert.doesNotMatch(JSON.stringify(res.body),/secret-test/);
+  global.fetch=async()=>({ok:true,json:async()=>{throw Object.assign(new Error('secret-test'),{name:'AbortError'});}});res=await call(body);assert.equal(res.statusCode,504);assert.match(res.body.error,/25秒/);
+  for(const status of [400,401,403,404,408,429,500,503,504]){global.fetch=async()=>({ok:false,status,json:async()=>({error:{message:'secret-test'}})});res=await call(body);assert.equal(res.statusCode,status);assert.match(res.body.error,new RegExp(String(status)));assert.doesNotMatch(JSON.stringify(res.body),/secret-test/);}
+ }finally{global.fetch=old;}
+});
+test('中継がJSON以外を返した場合はHTTPステータスだけを表示する',async()=>{
+ const {aiRequest}=await import('../src/ai.mjs'),old=global.fetch;
+ try{global.fetch=async()=>({ok:false,status:504,json:async()=>{throw Error('secret-test');}});await assert.rejects(aiRequest({provider:'gemini',key:'secret-test',model:'gemini-3.8-flash'},'draw',{word:'ねこ'}),e=>/HTTP 504/.test(e.message)&&!e.message.includes('secret-test'));}finally{global.fetch=old;}
+});

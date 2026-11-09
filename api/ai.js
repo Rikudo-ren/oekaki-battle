@@ -6,12 +6,24 @@ const providers={
  anthropic:{base:'https://api.anthropic.com/v1',headers:key=>({'x-api-key':key,'anthropic-version':'2023-06-01'})},
 };
 const err=(status,message)=>Object.assign(new Error(message),{status});
-const errorForStatus=status=>status===400?'モデルや画像入力の対応状況を確認してください。':status===401||status===403?'APIキーまたは利用権限を確認してください。':status===404?'指定したモデルが見つかりません。':status===429?'利用制限または料金枠を確認してください。':'AIサービスに接続できませんでした。';
+// Never return or log upstream error bodies: they may contain credentials or prompts.
+function errorForStatus(status){
+ if(status===400)return 'リクエストが拒否されました（AIサービス HTTP 400）。キー、モデル名、モデルの対応状況を確認してください。';
+ if(status===401||status===403)return `APIキーまたは利用権限を確認してください（AIサービス HTTP ${status}）。`;
+ if(status===404)return '指定したモデルまたはAPIが見つかりません（AIサービス HTTP 404）。';
+ if(status===408||status===504)return `AIサービスの応答がタイムアウトしました（HTTP ${status}）。`;
+ if(status===429)return '利用制限または料金枠を確認してください（AIサービス HTTP 429）。';
+ if(status>=500&&status<=599)return `AIサービス側で一時的なエラーが発生しました（HTTP ${status}）。`;
+ return `AIサービスへのリクエストが失敗しました（HTTP ${status}）。`;
+}
 async function upstream(url,headers,body){
- let response;
- try{response=await fetch(url,{method:body?'POST':'GET',headers:{...headers,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(18000),redirect:'error'});}catch{throw err(502,'AIサービスに接続できませんでした。');}
- if(!response.ok)throw err(response.status===429?429:response.status===401||response.status===403?401:response.status===404?404:502,errorForStatus(response.status));
- try{return await response.json();}catch{throw err(502,'AIサービスの応答を読み取れませんでした。');}
+ let response;const signal=AbortSignal.timeout(25000);
+ try{response=await fetch(url,{method:body?'POST':'GET',headers:{...headers,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal,redirect:'error'});}catch(e){
+  if(e?.name==='TimeoutError'||e?.name==='AbortError')throw err(504,'AIサービスの応答が25秒以内に届きませんでした。時間を置くか、より高速なモデルをお試しください。');
+  throw err(502,'サイトの中継サーバーからAIサービスへ接続できませんでした。');
+ }
+ if(!response.ok){const status=Number.isInteger(response.status)&&response.status>=400&&response.status<=599?response.status:502;throw err(status,errorForStatus(status));}
+ try{return await response.json();}catch(e){if(signal.aborted||e?.name==='TimeoutError'||e?.name==='AbortError')throw err(504,'AIサービスの応答が25秒以内に届きませんでした。時間を置くか、より高速なモデルをお試しください。');throw err(502,'AIサービスの応答を読み取れませんでした。');}
 }
 function usableModel(provider,id,model){
  if(typeof id!=='string'||id.length>160||!/^[a-zA-Z0-9._:-]+$/.test(id))return false;
@@ -33,19 +45,24 @@ async function listModels(provider,config,key){
 }
 async function generate(provider,config,key,model,prompt,image,draw){
  const headers=config.headers(key);let url,payload;
- const maxTokens=draw?4096:1024;
+ const geminiFlash38=provider==='gemini'&&/^gemini-3\.8-flash(?:$|-)/i.test(model);
+ const maxTokens=geminiFlash38?(draw?8192:2048):(draw?4096:1024);
  if(provider==='openai'){
   url=config.base+'/chat/completions';const content=[{type:'text',text:prompt}];if(image)content.push({type:'image_url',image_url:{url:image}});
   payload={model,max_completion_tokens:maxTokens,messages:[{role:'user',content}]};
  }else if(provider==='gemini'){
   url=`${config.base}/models/${encodeURIComponent(model)}:generateContent`;const parts=[{text:prompt}];if(image)parts.push({inlineData:{mimeType:'image/png',data:image.slice('data:image/png;base64,'.length)}});
   payload={contents:[{role:'user',parts}],generationConfig:{maxOutputTokens:maxTokens}};
+  // Flash 3.8 defaults to medium thinking; low reduces latency for this game.
+  // Do not send model-specific options to other models which may reject them.
+  if(geminiFlash38){payload.generationConfig.thinkingConfig={thinkingLevel:'low'};if(draw)payload.generationConfig.responseMimeType='application/json';}
  }else{
   url=config.base+'/messages';const content=[{type:'text',text:prompt}];if(image)content.push({type:'image',source:{type:'base64',media_type:'image/png',data:image.slice('data:image/png;base64,'.length)}});
   payload={model,max_tokens:maxTokens,messages:[{role:'user',content}]};
  }
  const json=await upstream(url,headers,payload);
- const text=provider==='openai'?json.choices?.[0]?.message?.content:provider==='gemini'?json.candidates?.[0]?.content?.parts?.filter(p=>typeof p.text==='string').map(p=>p.text).join(''):json.content?.filter(p=>p.type==='text').map(p=>p.text).join('');
+ if(provider==='gemini'&&json.candidates?.[0]?.finishReason==='MAX_TOKENS')throw err(502,'AIの応答が途中で切れました。別のモデルを選ぶか、もう一度お試しください。');
+ const text=provider==='openai'?json.choices?.[0]?.message?.content:provider==='gemini'?json.candidates?.[0]?.content?.parts?.filter(p=>!p.thought&&typeof p.text==='string').map(p=>p.text).join(''):json.content?.filter(p=>p.type==='text').map(p=>p.text).join('');
  if(typeof text!=='string'||!text.trim()||text.length>30000)throw err(502,'AIの応答が空か、長すぎました。');
  return text;
 }
@@ -64,7 +81,7 @@ module.exports=async function handler(req,res){
    prompt=`あなたはお絵かき当てゲームの回答者です。画像の絵を見て何かを推測してください。答えはひらがなで${length}文字（長音ーを含む）です。正解は知らされていません。推測を1つだけ、ひらがなのみで返してください。わからなければ「わからない」と返してください。説明や句読点は不要です。`;
   }else{
    if(typeof word!=='string'||!/^[\u3041-\u3096ー]{2,6}$/.test(word))throw err(400,'お題が不正です。');
-   prompt=`お絵かき当てゲームのため「${word}」を簡単な線画で描いてください。文字・数字を描かず、誰でも分かる特徴を大きく描きます。キャンバスは幅900、高さ540です。JSONのみを出力: {"strokes":[{"color":"#393632","width":7,"points":[[x,y],[x,y]]}]}。座標はx=0〜900、y=0〜540の整数。色は #393632 #ef806d #efc35e #79aa91 #80a6c8 のいずれか。2〜25本の線、各線2〜50点。線は順番に描画します。説明は不要。`;
+   prompt=`お絵かき当てゲームのため「${word}」を簡単な線画で描いてください。文字・数字を描かず、誰でも分かる特徴を大きく描きます。キャンバスは幅900、高さ540です。JSONのみを出力: {"strokes":[{"color":"#393632","width":7,"points":[[x,y],[x,y]]}]}。座標はx=0〜900、y=0〜540の整数。色は #393632 #ef806d #efc35e #79aa91 #80a6c8 のいずれか。3〜12本の線、各線2〜20点を目安に、簡潔に出力してください。線は順番に描画します。説明は不要。`;
   }
   return res.status(200).json({text:await generate(provider,config,key,model,prompt,action==='guess'?image:null,action==='draw')});
  }catch(e){return res.status(e.status||500).json({error:e.status?e.message:'AIの処理に失敗しました。'});}
